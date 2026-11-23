@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salle de réunion · MeetLite</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="page-room">
+  <!-- Barre supérieure de la salle vidéo -->
+  <header class="room-topbar">
+    <div class="room-info">
+      <span class="brand-dot"></span>
+      <h1 id="roomTitle">Réunion</h1>
+      <span class="room-code-tag" id="roomCodeTag">---</span>
+      <button type="button" id="copyRoomLinkBtn" class="btn btn-ghost btn-sm" title="Inviter des participants">
+        🔗 Inviter
+      </button>
+    </div>
+
+    <div class="room-status">
+      <span id="recIndicator" class="rec-indicator hidden" aria-live="polite">
+        <span class="rec-dot"></span>
+        <span id="recTimer">REC 00:00</span>
+      </span>
+      <span class="call-timer" id="callTimer">00:00</span>
+      <span class="count-pill" id="peerCountBadge" title="Participants connectés">1</span>
+    </div>
+  </header>
+
+  <!-- Sas d'aperçu caméra / micro ("Green Room") avant d'entrer -->
+  <div id="prejoinOverlay" class="prejoin-overlay">
+    <div class="prejoin-card">
+      <div class="prejoin-header">
+        <h2>Prêt à rejoindre ?</h2>
+        <span class="room-code-tag" id="prejoinRoomCode">---</span>
+      </div>
+
+      <div class="prejoin-preview">
+        <video id="prejoinVideo" autoplay muted playsinline></video>
+        <div class="avatar-placeholder hidden" id="prejoinAvatar">
+          <span class="avatar-circle" id="prejoinAvatarInitials">V</span>
+        </div>
+        <div class="prejoin-mic-meter" title="Niveau du microphone">
+          <div id="prejoinMicBar" class="prejoin-mic-bar"></div>
+        </div>
+      </div>
+
+      <div class="prejoin-toggles">
+        <button type="button" id="prejoinMicBtn" class="ctrl-btn active">
+          <span>🎙️</span><span>Micro</span>
+        </button>
+        <button type="button" id="prejoinCamBtn" class="ctrl-btn active">
+          <span>📹</span><span>Caméra</span>
+        </button>
+      </div>
+
+      <div class="field">
+        <label for="prejoinNameInput">Votre nom</label>
+        <input type="text" id="prejoinNameInput" maxlength="40" placeholder="Votre prénom ou pseudo" />
+      </div>
+
+      <button type="button" id="joinNowBtn" class="btn btn-primary btn-lg btn-full">
+        Rejoindre la réunion maintenant →
+      </button>
+    </div>
+  </div>
+
+  <!-- Zone principale : grille vidéo + panneau latéral -->
+  <main class="room-workspace">
+    <!-- Scène vidéo -->
+    <section class="video-stage">
+      <!-- Couche de réactions flottantes -->
+      <div id="reactionsLayer" class="reactions-layer" aria-hidden="true"></div>
+
+      <!-- Alerte non bloquante en cas d'erreur média (permission refusée, etc.) -->
+      <div id="mediaAlert" class="media-alert hidden" role="alert"></div>
+
+      <!-- Grille responsive des flux vidéo (local + distants) -->
+      <div id="videoGrid" class="video-grid" data-count="1">
+        <!-- Tuile vidéo locale -->
+        <div class="video-tile is-local" id="localTile">
+          <video id="localVideo" autoplay muted playsinline></video>
+          <div class="avatar-placeholder hidden" id="localAvatar">
+            <span class="avatar-circle" id="localAvatarInitials">V</span>
+          </div>
+          <span class="hand-indicator hidden" id="localHandBadge" title="Main levée">✋</span>
+          <button type="button" class="pin-btn" id="localPinBtn" title="Épingler / Détacher" aria-label="Épingler la vidéo">📌</button>
+          <div class="video-overlay">
+            <span class="participant-label" id="localNameLabel">Vous</span>
+            <span class="media-badges" id="localMediaBadges"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panneau latéral repliable (Chat / Participants) -->
+    <aside id="sidePanel" class="side-panel hidden">
+      <div class="side-tabs">
+        <button type="button" class="tab-btn active" data-tab="chat">Chat</button>
+        <button type="button" class="tab-btn" data-tab="participants">Participants</button>
+        <button type="button" id="closeSidePanelBtn" class="btn-icon-sm" aria-label="Fermer">✕</button>
+      </div>
+
+      <!-- Onglet Chat -->
+      <div id="tabChat" class="side-tab-content">
+        <ul id="roomChatList" class="room-chat-list"></ul>
+        <form id="roomChatForm" class="chat-input-row">
+          <input
+            type="text"
+            id="roomChatInput"
+            placeholder="Envoyer un message à tous..."
+            maxlength="500"
+            autocomplete="off"
+          />
+          <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+        </form>
+      </div>
+
+      <!-- Onglet Participants -->
+      <div id="tabParticipants" class="side-tab-content hidden">
+        <ul id="roomParticipantsList" class="participants-list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Barre de contrôle flottante (style Meet / Zoom) -->
+  <footer class="control-bar">
+    <div class="control-group">
+      <button type="button" id="toggleMicBtn" class="ctrl-btn active" title="Couper / Activer le micro">
+        <span class="ctrl-icon">🎙️</span>
+        <span class="ctrl-label">Micro</span>
+      </button>
+
+      <button type="button" id="toggleCamBtn" class="ctrl-btn active" title="Couper / Activer la caméra">
+        <span class="ctrl-icon">📹</span>
+        <span class="ctrl-label">Caméra</span>
+      </button>
+
+      <button type="button" id="toggleScreenBtn" class="ctrl-btn" title="Partager l'écran">
+        <span class="ctrl-icon">🖥️</span>
+        <span class="ctrl-label">Partager</span>
+      </button>
+
+      <button type="button" id="toggleRecordBtn" class="ctrl-btn" title="Enregistrer la réunion">
+        <span class="ctrl-icon">⏺️</span>
+        <span class="ctrl-label">Enregistrer</span>
+      </button>
+    </div>
+
+    <div class="control-group control-group-center">
+      <button type="button" id="toggleHandBtn" class="ctrl-btn" title="Lever / Baisser la main">
+        <span class="ctrl-icon">✋</span>
+        <span class="ctrl-label">Main</span>
+      </button>
+
+      <div class="reaction-wrapper">
+        <div id="reactionsPicker" class="reactions-picker hidden" role="menu">
+          <button type="button" class="reaction-opt" data-emoji="👍">👍</button>
+          <button type="button" class="reaction-opt" data-emoji="👏">👏</button>
+          <button type="button" class="reaction-opt" data-emoji="❤️">❤️</button>
+          <button type="button" class="reaction-opt" data-emoji="😂">😂</button>
+          <button type="button" class="reaction-opt" data-emoji="🎉">🎉</button>
+        </div>
+        <button type="button" id="toggleReactionsBtn" class="ctrl-btn" title="Envoyer une réaction">
+          <span class="ctrl-icon">😊</span>
+          <span class="ctrl-label">Réactions</span>
+        </button>
+      </div>
+
+      <button type="button" id="openSettingsBtn" class="ctrl-btn" title="Paramètres audio et vidéo">
+        <span class="ctrl-icon">⚙️</span>
+        <span class="ctrl-label">Paramètres</span>
+      </button>
+
+      <button type="button" id="toggleChatBtn" class="ctrl-btn" title="Ouvrir le chat">
+        <span class="ctrl-icon">💬</span>
+        <span class="ctrl-label">Chat</span>
+        <span id="chatUnreadBadge" class="unread-badge hidden">0</span>
+      </button>
+
+      <button type="button" id="toggleParticipantsBtn" class="ctrl-btn" title="Voir les participants">
+        <span class="ctrl-icon">👥</span>
+        <span class="ctrl-label">Personnes</span>
+      </button>
+    </div>
+
+    <div class="control-group">
+      <button type="button" id="leaveCallBtn" class="ctrl-btn ctrl-danger" title="Quitter la réunion">
+        <span class="ctrl-icon">📞</span>
+        <span class="ctrl-label">Quitter</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Modale Inviter en direct -->
+  <div id="inviteModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="inviteTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="inviteTitle">Inviter des participants</h2>
+        <button type="button" id="closeInviteBtn" class="btn-icon-sm" aria-label="Fermer">✕</button>
+      </div>
+
+      <div class="stack">
+        <div class="field">
+          <label for="inviteWaitInput">Lien de la salle d'attente musicale</label>
+          <div class="input-group">
+            <input type="text" id="inviteWaitInput" readonly />
+            <button type="button" id="copyWaitInviteBtn" class="btn btn-secondary btn-sm">Copier</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="inviteDirectInput">Lien direct de la salle vidéo</label>
+          <div class="input-group">
+            <input type="text" id="inviteDirectInput" readonly />
+            <button type="button" id="copyDirectInviteBtn" class="btn btn-primary btn-sm">Copier</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale Paramètres Audio / Vidéo -->
+  <div id="settingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="settingsTitle">Paramètres audio & vidéo</h2>
+        <button type="button" id="closeSettingsBtn" class="btn-icon-sm" aria-label="Fermer">✕</button>
+      </div>
+
+      <div class="stack">
+        <div class="field">
+          <label for="micSelect">Microphone</label>
+          <select id="micSelect" class="device-select"></select>
+        </div>
+
+        <div class="field">
+          <label for="camSelect">Caméra</label>
+          <select id="camSelect" class="device-select"></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/room.js"></script>
+</body>
+</html>

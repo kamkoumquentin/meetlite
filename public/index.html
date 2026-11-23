@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetLite · Visioconférence & Salle d'attente</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="page-home">
+  <div class="atmosphere"></div>
+
+  <!-- Barre supérieure -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-name">MeetLite</span>
+    </div>
+    <span class="badge-subtle">WebRTC · Temps réel</span>
+  </header>
+
+  <!-- Contenu principal -->
+  <main class="home-main">
+    <section class="card card-hero">
+      <div class="hero-header">
+        <h1>Réunions vidéo légères, <span class="accent">sans friction</span>.</h1>
+        <p class="subtitle">
+          Créez une salle avec accueil musical, puis basculez tous vos participants en visioconférence WebRTC en un clic.
+        </p>
+      </div>
+
+      <!-- Formulaire de création de réunion -->
+      <form id="createForm" class="stack">
+        <div class="field-row">
+          <div class="field">
+            <label for="titleInput">Nom de la réunion</label>
+            <input
+              type="text"
+              id="titleInput"
+              placeholder="Ex : Point produit hebdo"
+              value="Réunion d'équipe"
+              maxlength="80"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="hostNameInput">Votre nom (hôte)</label>
+            <input
+              type="text"
+              id="hostNameInput"
+              placeholder="Ex : Alex"
+              maxlength="40"
+              required
+            />
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">
+          Créer une nouvelle réunion
+        </button>
+      </form>
+
+      <!-- Résultat après création -->
+      <div id="createdPanel" class="created-panel hidden">
+        <div class="created-header">
+          <span class="status-pill status-ready">Salle prête</span>
+          <span class="room-code-tag" id="createdRoomCode"></span>
+        </div>
+
+        <div class="field">
+          <label for="waitingLinkInput">Lien de la salle d'attente (à partager aux participants)</label>
+          <div class="input-group">
+            <input type="text" id="waitingLinkInput" readonly />
+            <button type="button" class="btn btn-secondary btn-sm" data-copy="waitingLinkInput">
+              Copier
+            </button>
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <a id="enterAsHostBtn" class="btn btn-primary btn-lg" href="#">
+            Rejoindre la salle d'attente (Hôte) →
+          </a>
+          <button type="button" id="createAnotherBtn" class="btn btn-ghost">
+            Nouvelle salle
+          </button>
+        </div>
+      </div>
+
+      <div class="divider"><span>ou rejoindre avec un code</span></div>
+
+      <!-- Rejoindre une salle existante -->
+      <form id="joinByCodeForm" class="join-inline">
+        <input
+          type="text"
+          id="joinCodeInput"
+          placeholder="Code de salle (ex : abc-defg-hij)"
+          aria-label="Code de salle"
+          required
+        />
+        <button type="submit" class="btn btn-secondary">Rejoindre</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script>
+    // Gestion de la création et de l'accès rapide sur la page d'accueil
+    (function () {
+      const createForm = document.getElementById('createForm');
+      const createdPanel = document.getElementById('createdPanel');
+      const titleInput = document.getElementById('titleInput');
+      const hostNameInput = document.getElementById('hostNameInput');
+      const waitingLinkInput = document.getElementById('waitingLinkInput');
+      const createdRoomCode = document.getElementById('createdRoomCode');
+      const enterAsHostBtn = document.getElementById('enterAsHostBtn');
+      const createAnotherBtn = document.getElementById('createAnotherBtn');
+      const joinByCodeForm = document.getElementById('joinByCodeForm');
+      const joinCodeInput = document.getElementById('joinCodeInput');
+
+      // Pré-remplir le nom si déjà enregistré
+      const savedName = MeetCommon.getUserName();
+      if (savedName) hostNameInput.value = savedName;
+
+      createForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = titleInput.value.trim() || 'Réunion';
+        const hostName = hostNameInput.value.trim() || 'Hôte';
+
+        MeetCommon.setUserName(hostName);
+
+        try {
+          const res = await fetch('/api/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, hostName })
+          });
+
+          if (!res.ok) throw new Error('Erreur création de salle');
+          const data = await res.json();
+
+          if (data.hostToken) {
+            MeetCommon.setHostToken(data.roomId, data.hostToken);
+          }
+
+          const waitingUrl = `${window.location.origin}${data.waitingUrl}`;
+          waitingLinkInput.value = waitingUrl;
+          createdRoomCode.textContent = data.roomId;
+          enterAsHostBtn.href = `${data.waitingUrl}?host=1`;
+
+          createForm.classList.add('hidden');
+          createdPanel.classList.remove('hidden');
+        } catch (err) {
+          MeetCommon.showToast('Impossible de créer la salle. Réessayez.', 'error');
+        }
+      });
+
+      createAnotherBtn.addEventListener('click', () => {
+        createdPanel.classList.add('hidden');
+        createForm.classList.remove('hidden');
+      });
+
+      document.querySelectorAll('[data-copy]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const targetId = btn.getAttribute('data-copy');
+          const input = document.getElementById(targetId);
+          await MeetCommon.copyToClipboard(input.value);
+          MeetCommon.showToast('Lien copié dans le presse-papiers');
+        });
+      });
+
+      joinByCodeForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const raw = joinCodeInput.value.trim();
+        if (!raw) return;
+        // Accepte un code brut ou une URL complète
+        const code = raw.includes('/') ? raw.split('/').filter(Boolean).pop() : raw;
+        window.location.href = `/wait/${encodeURIComponent(code)}`;
+      });
+    })();
+  </script>
+</body>
+</html>

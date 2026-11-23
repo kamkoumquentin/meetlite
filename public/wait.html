@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salle d'attente · MeetLite</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="page-wait">
+  <div class="atmosphere"></div>
+
+  <header class="topbar">
+    <a href="/" class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-name">MeetLite</span>
+    </a>
+    <div class="topbar-meta">
+      <span class="room-code-tag" id="roomCodeTag">---</span>
+      <button type="button" id="copyWaitLinkBtn" class="btn btn-ghost btn-sm">
+        Copier le lien
+      </button>
+    </div>
+  </header>
+
+  <main class="wait-main">
+    <section class="card card-wait">
+      <!-- En-tête statut -->
+      <div class="wait-header">
+        <span class="status-pill" id="statusBadge">En attente de l'hôte</span>
+        <h1 id="roomTitle">Chargement...</h1>
+        <p class="subtitle" id="statusText">
+          Installez-vous confortablement. La visioconférence démarrera dès que l'hôte lancera la session.
+        </p>
+      </div>
+
+      <!-- Lecteur musical d'ambiance -->
+      <div class="music-player">
+        <div class="player-left">
+          <div class="equalizer" id="equalizer" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div>
+            <div class="track-title" id="trackName">Ambiance Lo-Fi Douce</div>
+            <div class="track-subtitle">Musique d'attente</div>
+          </div>
+        </div>
+
+        <div class="player-controls">
+          <button type="button" id="playBtn" class="btn-icon" title="Lecture / Pause" aria-label="Lecture / Pause">
+            ▶
+          </button>
+          <input
+            type="range"
+            id="volumeSlider"
+            min="0"
+            max="1"
+            step="0.05"
+            value="0.35"
+            aria-label="Volume"
+          />
+        </div>
+      </div>
+
+      <!-- Action Hôte : démarrer la réunion pour tout le monde -->
+      <div id="hostControls" class="host-controls hidden">
+        <button type="button" id="startMeetingBtn" class="btn btn-primary btn-lg btn-full">
+          Démarrer la réunion pour tous →
+        </button>
+        <p class="hint">
+          Tous les participants en attente seront automatiquement redirigés vers la salle vidéo.
+        </p>
+      </div>
+
+      <!-- Transition quand la réunion démarre -->
+      <div id="joinSection" class="join-banner hidden">
+        <p class="ready-text">La réunion vient de démarrer !</p>
+        <a id="joinRoomBtn" class="btn btn-primary btn-lg" href="#">
+          Entrer dans la salle vidéo →
+        </a>
+      </div>
+
+      <!-- Grille Participants + Chat rapide -->
+      <div class="wait-grid">
+        <div class="panel-box">
+          <div class="panel-title">
+            <span>Participants en attente</span>
+            <span class="count-pill" id="waitCount">0</span>
+          </div>
+          <ul id="participantsList" class="participants-list"></ul>
+        </div>
+
+        <div class="panel-box">
+          <div class="panel-title">
+            <span>Messages rapides</span>
+          </div>
+          <ul id="waitMessagesList" class="wait-messages"></ul>
+          <div class="chat-input-row">
+            <input
+              type="text"
+              id="messageInput"
+              placeholder="Écrire un message..."
+              maxlength="200"
+            />
+            <button type="button" id="sendMsgBtn" class="btn btn-secondary btn-sm">
+              Envoyer
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/wait.js"></script>
+</body>
+</html>
