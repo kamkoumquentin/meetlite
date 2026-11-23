@@ -201,6 +201,11 @@
     dom.prejoinVideo.srcObject = null;
     dom.prejoinOverlay.classList.add('hidden');
 
+    if (localStream) {
+      dom.localVideo.srcObject = localStream;
+      dom.localVideo.play().catch(() => {});
+    }
+
     startCallTimer();
     refreshParticipantsUI();
     joinSignalingRoom();
@@ -239,12 +244,20 @@
     try {
       localStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+        video: {
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 540, max: 720 },
+          frameRate: { ideal: 24, max: 30 },
+          facingMode: 'user'
+        }
       });
 
       audioEnabled = localStream.getAudioTracks().length > 0;
       videoEnabled = localStream.getVideoTracks().length > 0;
-      dom.localVideo.srcObject = localStream;
+      if (hasJoinedRoom) {
+        dom.localVideo.srcObject = localStream;
+        dom.localVideo.play().catch(() => {});
+      }
       if (audioEnabled) startAudioMonitor('local', localStream, dom.localTile);
     } catch (primaryErr) {
       console.warn('Échec accès caméra+micro, tentative audio seul:', primaryErr);
@@ -477,7 +490,13 @@
       }
     };
 
-    // Surveillance de l'état de connexion pour nettoyer en cas d'échec définitif
+    // Surveillance de l'état ICE / connexion
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        MeetCommon.showToast('Connexion vidéo bloquée entre réseaux (TURN requis sur 4G/pare-feu).');
+      }
+    };
+
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         removePeer(peerId);
@@ -644,6 +663,8 @@
       const video = document.createElement('video');
       video.autoplay = true;
       video.playsInline = true;
+      video.setAttribute('autoplay', '');
+      video.setAttribute('playsinline', '');
 
       const avatar = document.createElement('div');
       avatar.className = 'avatar-placeholder hidden';
@@ -704,6 +725,7 @@
     if (videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
+    videoEl.play().catch(() => {});
     if (stream.getAudioTracks().length > 0) {
       startAudioMonitor(peerId, stream, tile);
     }
