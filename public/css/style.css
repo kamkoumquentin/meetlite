@@ -577,6 +577,7 @@ input[type="url"]:focus {
   justify-content: center;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
 }
 
 .media-alert {

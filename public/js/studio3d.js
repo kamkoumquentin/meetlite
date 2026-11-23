@@ -87,6 +87,11 @@ function setupThreeScene() {
   renderer.setSize(w, h, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  dom.mount.style.position = 'relative';
+  dom.mount.style.overflow = 'hidden';
+  dom.mount.style.minHeight = '0';
+  renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;';
   dom.mount.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -168,13 +173,8 @@ function resizeRenderer(contentRect) {
 
 function startRenderLoop() {
   if (animFrameId) cancelAnimationFrame(animFrameId);
-  let frameCounter = 0;
   const tick = () => {
     animFrameId = requestAnimationFrame(tick);
-    frameCounter += 1;
-    if (frameCounter % 120 === 0) {
-      console.log('[3D] F - rendu actif, isOpen =', isOpen, 'enfants scène =', scene.children.length);
-    }
     if (!isOpen) return;
 
     controls.update();

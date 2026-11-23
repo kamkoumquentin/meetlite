@@ -4,9 +4,9 @@
  * les requêtes temps réel (/socket.io, /api/, /health).
  */
 
-const CACHE_NAME = 'meetlite-shell-v1';
+const CACHE_NAME = 'meetlite-shell-v2';
 const STATIC_ASSETS = [
-  '/css/style.css',
+  '/css/style.css?v=2',
   '/js/common.js',
   '/manifest.json',
   '/icons/icon.svg'
