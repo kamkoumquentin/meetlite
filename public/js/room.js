@@ -40,6 +40,8 @@
   });
 
   // Flux locaux
+  const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  let currentFacingMode = 'user';
   let localStream = null;
   let screenStream = null;
   let mediaInitPromise = null;
@@ -109,6 +111,7 @@
     reactionsLayer: document.getElementById('reactionsLayer'),
     toggleMicBtn: document.getElementById('toggleMicBtn'),
     toggleCamBtn: document.getElementById('toggleCamBtn'),
+    flipCameraBtn: document.getElementById('flipCameraBtn'),
     toggleScreenBtn: document.getElementById('toggleScreenBtn'),
     toggleRecordBtn: document.getElementById('toggleRecordBtn'),
     toggleHandBtn: document.getElementById('toggleHandBtn'),
@@ -173,10 +176,26 @@
     mediaInitPromise = Promise.all([loadIceServers(), initLocalMedia()]);
     await mediaInitPromise;
     logIceServersConfig();
+    await updateFlipCameraVisibility();
     if (localStream) {
       dom.prejoinVideo.srcObject = localStream;
     }
     updateLocalControlsUI();
+  }
+
+  async function updateFlipCameraVisibility() {
+    if (!dom.flipCameraBtn) return;
+    if (isMobileDevice) {
+      dom.flipCameraBtn.classList.remove('hidden');
+      return;
+    }
+    try {
+      if (navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        dom.flipCameraBtn.classList.toggle('hidden', videoInputs.length < 2);
+      }
+    } catch (_err) {}
   }
 
   function logIceServersConfig() {
@@ -239,14 +258,25 @@
 
     dom.localNameLabel.textContent = `${userName} (Vous)`;
     dom.localAvatarInitials.textContent = getInitials(userName);
-    dom.prejoinVideo.srcObject = null;
+
+    if (dom.prejoinVideo) {
+      dom.prejoinVideo.pause();
+      dom.prejoinVideo.srcObject = null;
+    }
     dom.prejoinOverlay.classList.add('hidden');
 
     if (localStream) {
       dom.localVideo.srcObject = localStream;
-      dom.localVideo.play().catch((err) => {
+      dom.localVideo.muted = true;
+      dom.localVideo.setAttribute('playsinline', '');
+      await dom.localVideo.play().catch((err) => {
         console.warn('[RTC] localVideo.play error:', err?.name, err?.message);
       });
+
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack && !screenEnabled) {
+        replaceVideoTrackAcrossPeers(videoTrack);
+      }
     }
 
     startCallTimer();
@@ -284,15 +314,37 @@
       return;
     }
 
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-        video: {
+    const videoConstraints = isMobileDevice
+      ? {
+          facingMode: currentFacingMode || 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24, max: 30 }
+        }
+      : {
           width: { ideal: 960, max: 1280 },
           height: { ideal: 540, max: 720 },
           frameRate: { ideal: 24, max: 30 },
-          facingMode: 'user'
+          facingMode: currentFacingMode || 'user'
+        };
+
+    try {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: videoConstraints
+        });
+      } catch (constraintErr) {
+        if (constraintErr?.name === 'OverconstrainedError' || constraintErr?.name === 'NotReadableError') {
+          console.warn('[RTC] Retry getUserMedia avec contraintes simples:', constraintErr.name);
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        } else {
+          throw constraintErr;
         }
+      }
+
+      localStream.getTracks().forEach((track) => {
+        track.enabled = true;
       });
 
       audioEnabled = localStream.getAudioTracks().length > 0;
@@ -300,6 +352,8 @@
       logMediaStreamDiagnostics('initLocalMedia(av)', localStream);
       if (hasJoinedRoom) {
         dom.localVideo.srcObject = localStream;
+        dom.localVideo.muted = true;
+        dom.localVideo.setAttribute('playsinline', '');
         dom.localVideo.play().catch((err) => {
           console.warn('[RTC] localVideo.play error:', err?.name, err?.message);
         });
@@ -646,6 +700,7 @@
     if (localStream) {
       localStream.getTracks().forEach((track) => {
         if (screenEnabled && screenStream && track.kind === 'video') return;
+        track.enabled = track.kind === 'audio' ? audioEnabled : videoEnabled;
         pc.addTrack(track, localStream);
       });
     }
@@ -1163,6 +1218,9 @@
   function bindUIEvents() {
     dom.toggleMicBtn.addEventListener('click', toggleMicrophone);
     dom.toggleCamBtn.addEventListener('click', toggleCamera);
+    if (dom.flipCameraBtn) {
+      dom.flipCameraBtn.addEventListener('click', flipCamera);
+    }
     dom.prejoinMicBtn.addEventListener('click', toggleMicrophone);
     dom.prejoinCamBtn.addEventListener('click', toggleCamera);
     dom.joinNowBtn.addEventListener('click', enterMeetingFromGreenRoom);
@@ -1268,6 +1326,64 @@
     syncLocalMediaState();
   }
 
+  async function flipCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const nextFacing = currentFacingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      // Sur mobile, stopper l'ancienne piste caméra avant d'ouvrir l'autre capteur
+      if (localStream) {
+        localStream.getVideoTracks().forEach((oldTrack) => {
+          localStream.removeTrack(oldTrack);
+          oldTrack.stop();
+        });
+      }
+
+      let newStream = null;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: nextFacing,
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 24, max: 30 }
+          }
+        });
+      } catch (_err) {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacing }
+        });
+      }
+
+      currentFacingMode = nextFacing;
+      logMediaStreamDiagnostics(`flipCamera(${nextFacing})`, newStream);
+
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+      newTrack.enabled = videoEnabled;
+
+      if (!localStream) localStream = new MediaStream();
+      localStream.addTrack(newTrack);
+
+      dom.localTile.classList.toggle('is-rear-camera', currentFacingMode === 'environment');
+
+      if (!screenEnabled) {
+        dom.localVideo.srcObject = localStream;
+        dom.localVideo.muted = true;
+        dom.localVideo.setAttribute('playsinline', '');
+        await dom.localVideo.play().catch((err) => {
+          console.warn('[RTC] flipCamera localVideo.play error:', err?.name, err?.message);
+        });
+        await replaceVideoTrackAcrossPeers(newTrack);
+      }
+
+      MeetCommon.showToast(currentFacingMode === 'environment' ? 'Caméra arrière activée' : 'Caméra avant activée');
+    } catch (err) {
+      console.error('[RTC] Erreur flipCamera:', err);
+      MeetCommon.showToast('Impossible d’inverser la caméra.');
+    }
+  }
+
   function toggleCamera() {
     if (!localStream || localStream.getVideoTracks().length === 0) {
       MeetCommon.showToast('Aucune caméra disponible.');
@@ -1278,6 +1394,64 @@
       track.enabled = videoEnabled;
     });
     syncLocalMediaState();
+  }
+
+  async function flipCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const nextFacing = currentFacingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      // Sur mobile, stopper l'ancienne piste caméra avant d'ouvrir l'autre capteur
+      if (localStream) {
+        localStream.getVideoTracks().forEach((oldTrack) => {
+          localStream.removeTrack(oldTrack);
+          oldTrack.stop();
+        });
+      }
+
+      let newStream = null;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: nextFacing,
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 24, max: 30 }
+          }
+        });
+      } catch (_err) {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacing }
+        });
+      }
+
+      currentFacingMode = nextFacing;
+      logMediaStreamDiagnostics(`flipCamera(${nextFacing})`, newStream);
+
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+      newTrack.enabled = videoEnabled;
+
+      if (!localStream) localStream = new MediaStream();
+      localStream.addTrack(newTrack);
+
+      dom.localTile.classList.toggle('is-rear-camera', currentFacingMode === 'environment');
+
+      if (!screenEnabled) {
+        dom.localVideo.srcObject = localStream;
+        dom.localVideo.muted = true;
+        dom.localVideo.setAttribute('playsinline', '');
+        await dom.localVideo.play().catch((err) => {
+          console.warn('[RTC] flipCamera localVideo.play error:', err?.name, err?.message);
+        });
+        await replaceVideoTrackAcrossPeers(newTrack);
+      }
+
+      MeetCommon.showToast(currentFacingMode === 'environment' ? 'Caméra arrière activée' : 'Caméra avant activée');
+    } catch (err) {
+      console.error('[RTC] Erreur flipCamera:', err);
+      MeetCommon.showToast('Impossible d’inverser la caméra.');
+    }
   }
 
   async function toggleScreenShare() {
@@ -1324,13 +1498,71 @@
     syncLocalMediaState();
   }
 
-  function replaceVideoTrackAcrossPeers(newTrack) {
+  async function flipCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const nextFacing = currentFacingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      // Sur mobile, stopper l'ancienne piste caméra avant d'ouvrir l'autre capteur
+      if (localStream) {
+        localStream.getVideoTracks().forEach((oldTrack) => {
+          localStream.removeTrack(oldTrack);
+          oldTrack.stop();
+        });
+      }
+
+      let newStream = null;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: nextFacing,
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 24, max: 30 }
+          }
+        });
+      } catch (_err) {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacing }
+        });
+      }
+
+      currentFacingMode = nextFacing;
+      logMediaStreamDiagnostics(`flipCamera(${nextFacing})`, newStream);
+
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+      newTrack.enabled = videoEnabled;
+
+      if (!localStream) localStream = new MediaStream();
+      localStream.addTrack(newTrack);
+
+      dom.localTile.classList.toggle('is-rear-camera', currentFacingMode === 'environment');
+
+      if (!screenEnabled) {
+        dom.localVideo.srcObject = localStream;
+        dom.localVideo.muted = true;
+        dom.localVideo.setAttribute('playsinline', '');
+        await dom.localVideo.play().catch((err) => {
+          console.warn('[RTC] flipCamera localVideo.play error:', err?.name, err?.message);
+        });
+        await replaceVideoTrackAcrossPeers(newTrack);
+      }
+
+      MeetCommon.showToast(currentFacingMode === 'environment' ? 'Caméra arrière activée' : 'Caméra avant activée');
+    } catch (err) {
+      console.error('[RTC] Erreur flipCamera:', err);
+      MeetCommon.showToast('Impossible d’inverser la caméra.');
+    }
+  }
+
+  async function replaceVideoTrackAcrossPeers(newTrack) {
     for (const pc of peerConnections.values()) {
       const videoSender = pc.getSenders().find(
         (s) => (s.track && s.track.kind === 'video') || (!s.track && s.dtmf === null)
       );
       if (videoSender) {
-        videoSender.replaceTrack(newTrack);
+        await videoSender.replaceTrack(newTrack);
       }
     }
   }

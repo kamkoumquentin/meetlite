@@ -843,7 +843,8 @@ input[type="range"]::-moz-range-thumb {
   transform: scaleX(-1);
 }
 
-.video-tile.is-local.is-screen video {
+.video-tile.is-local.is-screen video,
+.video-tile.is-local.is-rear-camera video {
   transform: none;
 }
 
