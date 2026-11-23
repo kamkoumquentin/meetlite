@@ -34,6 +34,8 @@ let animFrameId = null;
 let currentModelGroup = null;
 let pinsGroup = null;
 const activePins = [];
+let lastRendererWidth = 0;
+let lastRendererHeight = 0;
 
 const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2();
@@ -82,7 +84,7 @@ function setupThreeScene() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(w, h);
+  renderer.setSize(w, h, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   dom.mount.appendChild(renderer.domElement);
@@ -119,9 +121,11 @@ function setupThreeScene() {
 
   // Redimensionnement automatique
   if (typeof ResizeObserver !== 'undefined') {
-    new ResizeObserver(resizeRenderer).observe(dom.mount);
+    new ResizeObserver((entries) => {
+      resizeRenderer(entries[0]?.contentRect);
+    }).observe(dom.mount);
   } else {
-    window.addEventListener('resize', resizeRenderer);
+    window.addEventListener('resize', () => resizeRenderer());
   }
 
   // Synchronisation caméra throttlée (60 ms)
@@ -141,14 +145,25 @@ function setupThreeScene() {
   startRenderLoop();
 }
 
-function resizeRenderer() {
+function resizeRenderer(contentRect) {
   if (!renderer || !camera || !dom.mount) return;
-  const w = dom.mount.clientWidth || window.innerWidth || 640;
-  const h = dom.mount.clientHeight || Math.max(240, window.innerHeight - 140);
+  const rect = contentRect || dom.mount.getBoundingClientRect();
+  let width = Math.floor(rect.width);
+  let height = Math.floor(rect.height);
 
-  camera.aspect = w / h;
+  if (width < 1 || height < 1) return;
+
+  width = Math.min(width, 2000);
+  height = Math.min(height, 2000);
+
+  if (width === lastRendererWidth && height === lastRendererHeight) return;
+  lastRendererWidth = width;
+  lastRendererHeight = height;
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
 }
 
 function startRenderLoop() {
