@@ -154,6 +154,9 @@
         userName,
         onToggle: (isOpen) => {
           dom.toggleWhiteboardBtn.classList.toggle('active', isOpen);
+          if (dom.videoGrid?.parentElement) {
+            dom.videoGrid.parentElement.classList.toggle('has-whiteboard', isOpen);
+          }
         }
       });
     }
@@ -306,7 +309,7 @@
     });
 
     // Confirmation d'entrée dans la salle : on initie une offre vers chaque pair existant
-    socket.on('room-joined', async ({ title, selfIsHost, peers, messages, whiteboardHistory }) => {
+    socket.on('room-joined', async ({ title, selfIsHost, peers, messages, whiteboardHistory, whiteboardOpen }) => {
       dom.roomTitle.textContent = title || 'Réunion';
       if (typeof selfIsHost === 'boolean') {
         isHost = selfIsHost;
@@ -315,9 +318,14 @@
       // Restaurer l'historique du chat sans incrémenter le badge non-lu
       (messages || []).forEach((msg) => appendChatMessage(msg, { countUnread: false }));
 
-      // Restaurer l'historique du tableau blanc
-      if (window.MeetWhiteboard && Array.isArray(whiteboardHistory)) {
-        MeetWhiteboard.loadHistory(whiteboardHistory);
+      // Restaurer l'historique et l'état d'ouverture du tableau blanc
+      if (window.MeetWhiteboard) {
+        if (Array.isArray(whiteboardHistory)) {
+          MeetWhiteboard.loadHistory(whiteboardHistory);
+        }
+        if (whiteboardOpen) {
+          MeetWhiteboard.open({ remote: true });
+        }
       }
 
       for (const peer of peers) {

@@ -67,36 +67,31 @@ window.MeetWhiteboard = (function () {
   // OUVERTURE / FERMETURE & HISTORIQUE
   // ==========================================================================
 
-  function open() {
+  function open({ remote = false } = {}) {
     if (isOpen) return;
     isOpen = true;
     dom.container.classList.remove('hidden');
-    resizeCanvases();
-    emitToggle(true);
     if (onToggleCallback) onToggleCallback(true);
+    requestAnimationFrame(() => resizeCanvases());
+    if (!remote && socketRef) {
+      socketRef.emit('wb-open', { roomId: roomIdRef, name: userNameRef });
+    }
   }
 
-  function close() {
+  function close({ remote = false } = {}) {
     if (!isOpen) return;
     isOpen = false;
     hideTextInput();
     dom.container.classList.add('hidden');
-    emitToggle(false);
     if (onToggleCallback) onToggleCallback(false);
+    if (!remote && socketRef) {
+      socketRef.emit('wb-close', { roomId: roomIdRef, name: userNameRef });
+    }
   }
 
   function toggle() {
-    if (isOpen) close();
-    else open();
-  }
-
-  function emitToggle(openState) {
-    if (!socketRef) return;
-    socketRef.emit('wb-toggle', {
-      roomId: roomIdRef,
-      name: userNameRef,
-      isOpen: openState
-    });
+    if (isOpen) close({ remote: false });
+    else open({ remote: false });
   }
 
   function loadHistory(actions) {
@@ -176,14 +171,17 @@ window.MeetWhiteboard = (function () {
   }
 
   function resizeCanvases() {
-    const width = dom.canvasWrap.clientWidth;
-    const height = dom.canvasWrap.clientHeight;
-    if (!width || !height) return;
+    const rect = dom.canvasWrap.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
 
-    dom.canvas.width = width;
-    dom.canvas.height = height;
-    dom.previewCanvas.width = width;
-    dom.previewCanvas.height = height;
+    const dpr = window.devicePixelRatio || 1;
+    const pixelW = Math.round(rect.width * dpr);
+    const pixelH = Math.round(rect.height * dpr);
+
+    dom.canvas.width = pixelW;
+    dom.canvas.height = pixelH;
+    dom.previewCanvas.width = pixelW;
+    dom.previewCanvas.height = pixelH;
 
     replayHistory();
   }
@@ -197,8 +195,9 @@ window.MeetWhiteboard = (function () {
   }
 
   function normalizePos(pos) {
-    const w = dom.canvas.width || 1;
-    const h = dom.canvas.height || 1;
+    const rect = dom.canvas.getBoundingClientRect();
+    const w = rect.width || 1;
+    const h = rect.height || 1;
     return { x: pos.x / w, y: pos.y / h };
   }
 
@@ -312,9 +311,10 @@ window.MeetWhiteboard = (function () {
   // ==========================================================================
 
   function showTextInputAt(pos) {
+    const rect = dom.canvas.getBoundingClientRect();
     pendingTextNorm = normalizePos(pos);
-    dom.textInput.style.left = `${Math.min(pos.x, Math.max(0, dom.canvas.width - 180))}px`;
-    dom.textInput.style.top = `${Math.min(pos.y, Math.max(0, dom.canvas.height - 40))}px`;
+    dom.textInput.style.left = `${Math.min(pos.x, Math.max(0, rect.width - 180))}px`;
+    dom.textInput.style.top = `${Math.min(pos.y, Math.max(0, rect.height - 40))}px`;
     dom.textInput.value = '';
     dom.textInput.classList.remove('hidden');
     dom.textInput.focus();
@@ -371,9 +371,17 @@ window.MeetWhiteboard = (function () {
       clearMain();
     });
 
-    socketRef.on('wb-toggle', ({ name, isOpen: opened }) => {
-      if (opened && typeof MeetCommon !== 'undefined') {
-        MeetCommon.showToast(`${name} a ouvert le tableau blanc`);
+    socketRef.on('wb-state-change', ({ open: shouldOpen, openedBy, closedBy } = {}) => {
+      if (shouldOpen) {
+        open({ remote: true });
+        if (openedBy && openedBy !== userNameRef && typeof MeetCommon !== 'undefined') {
+          MeetCommon.showToast(`${openedBy} a ouvert le tableau blanc`);
+        }
+      } else {
+        close({ remote: true });
+        if (closedBy && closedBy !== userNameRef && typeof MeetCommon !== 'undefined') {
+          MeetCommon.showToast(`${closedBy} a fermé le tableau blanc`);
+        }
       }
     });
   }
@@ -384,10 +392,11 @@ window.MeetWhiteboard = (function () {
     const h = ctx.canvas.height;
     if (!w || !h) return;
 
+    const dpr = window.devicePixelRatio || 1;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = action.size || 5;
+    ctx.lineWidth = (action.size || 5) * dpr;
 
     if (action.isEraser) {
       ctx.globalCompositeOperation = 'destination-out';
@@ -426,7 +435,7 @@ window.MeetWhiteboard = (function () {
       }
 
       case 'text': {
-        const fontSize = Math.max(14, (action.size || 5) * 3.2);
+        const fontSize = Math.max(14, (action.size || 5) * 3.2) * dpr;
         ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
         ctx.textBaseline = 'top';
         ctx.fillText(action.text || '', x0, y0);

@@ -141,7 +141,8 @@ app.post('/api/rooms', (req, res) => {
     roomParticipants: new Map(),
     messages: [],
     roomMessages: [],
-    whiteboardHistory: []
+    whiteboardHistory: [],
+    whiteboardOpen: false
   };
 
   rooms.set(roomId, room);
@@ -317,7 +318,8 @@ io.on('connection', (socket) => {
       selfIsHost: verifiedHost,
       peers: existingPeers,
       messages: room.roomMessages,
-      whiteboardHistory: room.whiteboardHistory
+      whiteboardHistory: room.whiteboardHistory,
+      whiteboardOpen: room.whiteboardOpen
     });
 
     socket.to(roomChannel).emit('user-joined', participant);
@@ -465,13 +467,40 @@ io.on('connection', (socket) => {
     io.to(`room:${roomId}`).emit('wb-clear');
   });
 
+  socket.on('wb-open', ({ roomId, name } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.whiteboardOpen = true;
+    io.to(`room:${roomId}`).emit('wb-state-change', {
+      open: true,
+      openedBy: (name || 'Un participant').trim().slice(0, 40)
+    });
+  });
+
+  socket.on('wb-close', ({ roomId, name } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.whiteboardOpen = false;
+    io.to(`room:${roomId}`).emit('wb-state-change', {
+      open: false,
+      closedBy: (name || 'Un participant').trim().slice(0, 40)
+    });
+  });
+
   socket.on('wb-toggle', ({ roomId, name, isOpen } = {}) => {
     const room = rooms.get(roomId);
     if (!room || socket.data?.roomId !== roomId) return;
 
-    socket.to(`room:${roomId}`).emit('wb-toggle', {
-      name: (name || 'Un participant').trim().slice(0, 40),
-      isOpen: Boolean(isOpen)
+    room.lastActiveAt = Date.now();
+    room.whiteboardOpen = Boolean(isOpen);
+    io.to(`room:${roomId}`).emit('wb-state-change', {
+      open: room.whiteboardOpen,
+      openedBy: room.whiteboardOpen ? (name || 'Un participant').trim().slice(0, 40) : undefined,
+      closedBy: !room.whiteboardOpen ? (name || 'Un participant').trim().slice(0, 40) : undefined
     });
   });
 
