@@ -68,6 +68,7 @@
   const peerMetadata = new Map();         // Map<socketId, { name: string, isHost: boolean, mediaState: object }>
   const pendingIceCandidates = new Map(); // Map<socketId, RTCIceCandidateInit[]>
   const makingOffer = new Map();          // Map<socketId, boolean>
+  const ignoreOffer = new Map();          // Map<socketId, boolean>
 
   // Références DOM
   const dom = {
@@ -374,7 +375,8 @@
         if (peer.mediaState?.screen) {
           pinTile(`tile-${peer.socketId}`, { isAuto: true });
         }
-        await initiateOfferToPeer(peer.socketId);
+        // Perfect Negotiation : createPeerConnection attache les pistes et déclenche onnegotiationneeded
+        createPeerConnection(peer.socketId);
       }
 
       refreshParticipantsUI();
@@ -492,9 +494,9 @@
       renderRemoteVideoTile(peerId, stream);
     };
 
-    // Renégociation automatique sécurisée si une piste est ajoutée/modifiée après coup
+    // Renégociation automatique sécurisée (Perfect Negotiation)
     pc.onnegotiationneeded = async () => {
-      if (makingOffer.get(peerId)) return;
+      if (makingOffer.get(peerId) || pc.signalingState !== 'stable') return;
       try {
         makingOffer.set(peerId, true);
         await pc.setLocalDescription();
@@ -555,31 +557,21 @@
   }
 
   /**
-   * Crée et envoie une offre SDP vers un pair.
-   */
-  async function initiateOfferToPeer(peerId) {
-    const pc = createPeerConnection(peerId);
-    try {
-      makingOffer.set(peerId, true);
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-      });
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', { to: peerId, offer: pc.localDescription });
-    } catch (err) {
-      console.error(`Erreur création offre pour ${peerId}:`, err);
-    } finally {
-      makingOffer.set(peerId, false);
-    }
-  }
-
-  /**
-   * Traite une offre SDP entrante et renvoie une réponse.
+   * Traite une offre SDP entrante selon le patron Perfect Negotiation.
    */
   async function handleReceiveOffer({ from, offer }) {
     const pc = createPeerConnection(from);
+    const isPolite = (socket.id || '') < from;
+
     try {
+      const offerCollision = makingOffer.get(from) || pc.signalingState !== 'stable';
+      const ignore = !isPolite && offerCollision;
+      ignoreOffer.set(from, ignore);
+      if (ignore) {
+        console.warn(`[WebRTC] Offre ignorée de ${from} (collision, impolite)`);
+        return;
+      }
+
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       await flushPendingIceCandidates(from, pc);
 
@@ -592,11 +584,16 @@
   }
 
   /**
-   * Traite une réponse SDP entrante.
+   * Traite une réponse SDP entrante (uniquement si en attente d'une réponse locale).
    */
   async function handleReceiveAnswer({ from, answer }) {
     const pc = peerConnections.get(from);
     if (!pc) return;
+
+    if (pc.signalingState !== 'have-local-offer') {
+      console.warn(`[WebRTC] Réponse ignorée de ${from} (état: ${pc.signalingState})`);
+      return;
+    }
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
@@ -623,7 +620,9 @@
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
-      console.warn(`Erreur ajout ICE candidate de ${from}:`, err);
+      if (!ignoreOffer.get(from)) {
+        console.warn(`Erreur ajout ICE candidate de ${from}:`, err);
+      }
     }
   }
 
@@ -636,7 +635,9 @@
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.warn(`Erreur flush ICE candidate pour ${peerId}:`, err);
+        if (!ignoreOffer.get(peerId)) {
+          console.warn(`Erreur flush ICE candidate pour ${peerId}:`, err);
+        }
       }
     }
   }
@@ -663,6 +664,7 @@
     peerMetadata.delete(peerId);
     pendingIceCandidates.delete(peerId);
     makingOffer.delete(peerId);
+    ignoreOffer.delete(peerId);
     stopAudioMonitor(peerId);
 
     const tileId = `tile-${peerId}`;
