@@ -3,25 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0b0f19" />
+  <meta name="theme-color" content="#090d16" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <title>Salle d'attente · MeetLite</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=3" />
 </head>
 <body class="page-wait">
   <div class="atmosphere"></div>
 
   <header class="topbar">
     <a href="/" class="brand">
-      <span class="brand-dot"></span>
+      <img src="/icons/icon.svg" alt="" class="brand-logo" width="28" height="28" />
       <span class="brand-name">MeetLite</span>
     </a>
     <div class="topbar-meta">
       <span class="room-code-tag" id="roomCodeTag">---</span>
-      <button type="button" id="copyWaitLinkBtn" class="btn btn-ghost btn-sm">
+      <button type="button" id="copyWaitLinkBtn" class="btn btn-secondary btn-sm">
         Copier le lien
       </button>
     </div>
@@ -29,86 +32,90 @@
 
   <main class="wait-main">
     <section class="card card-wait">
-      <!-- En-tête statut -->
-      <div class="wait-header">
-        <span class="status-pill" id="statusBadge">En attente de l'hôte</span>
-        <h1 id="roomTitle">Chargement...</h1>
-        <p class="subtitle" id="statusText">
-          Installez-vous confortablement. La visioconférence démarrera dès que l'hôte lancera la session.
-        </p>
-      </div>
-
-      <!-- Lecteur musical d'ambiance -->
-      <div class="music-player">
-        <div class="player-left">
-          <div class="equalizer" id="equalizer" aria-hidden="true">
-            <span></span><span></span><span></span><span></span>
+      <div class="wait-layout">
+        <!-- Colonne gauche : Statut, lecteur musical & action hôte -->
+        <div class="wait-col-main">
+          <div class="wait-header">
+            <span class="status-pill" id="statusBadge"><span class="pulse-dot"></span>En attente de l'hôte</span>
+            <h1 id="roomTitle">Chargement...</h1>
+            <p class="subtitle" id="statusText">
+              Installez-vous confortablement. La visioconférence démarrera dès que l'hôte lancera la session.
+            </p>
           </div>
-          <div>
-            <div class="track-title" id="trackName">Ambiance Lo-Fi Douce</div>
-            <div class="track-subtitle">Musique d'attente</div>
+
+          <!-- Lecteur musical d'ambiance -->
+          <div class="music-player">
+            <div class="player-left">
+              <div class="equalizer" id="equalizer" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <div>
+                <div class="track-title" id="trackName">Ambiance Lo-Fi Douce</div>
+                <div class="track-subtitle">Synthèse Web Audio</div>
+              </div>
+            </div>
+
+            <div class="player-controls">
+              <button type="button" id="playBtn" class="btn-icon" title="Lecture / Pause" aria-label="Lecture / Pause">
+                ▶
+              </button>
+              <input
+                type="range"
+                id="volumeSlider"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.35"
+                aria-label="Volume"
+              />
+            </div>
           </div>
-        </div>
 
-        <div class="player-controls">
-          <button type="button" id="playBtn" class="btn-icon" title="Lecture / Pause" aria-label="Lecture / Pause">
-            ▶
-          </button>
-          <input
-            type="range"
-            id="volumeSlider"
-            min="0"
-            max="1"
-            step="0.05"
-            value="0.35"
-            aria-label="Volume"
-          />
-        </div>
-      </div>
-
-      <!-- Action Hôte : démarrer la réunion pour tout le monde -->
-      <div id="hostControls" class="host-controls hidden">
-        <button type="button" id="startMeetingBtn" class="btn btn-primary btn-lg btn-full">
-          Démarrer la réunion pour tous →
-        </button>
-        <p class="hint">
-          Tous les participants en attente seront automatiquement redirigés vers la salle vidéo.
-        </p>
-      </div>
-
-      <!-- Transition quand la réunion démarre -->
-      <div id="joinSection" class="join-banner hidden">
-        <p class="ready-text">La réunion vient de démarrer !</p>
-        <a id="joinRoomBtn" class="btn btn-primary btn-lg" href="#">
-          Entrer dans la salle vidéo →
-        </a>
-      </div>
-
-      <!-- Grille Participants + Chat rapide -->
-      <div class="wait-grid">
-        <div class="panel-box">
-          <div class="panel-title">
-            <span>Participants en attente</span>
-            <span class="count-pill" id="waitCount">0</span>
-          </div>
-          <ul id="participantsList" class="participants-list"></ul>
-        </div>
-
-        <div class="panel-box">
-          <div class="panel-title">
-            <span>Messages rapides</span>
-          </div>
-          <ul id="waitMessagesList" class="wait-messages"></ul>
-          <div class="chat-input-row">
-            <input
-              type="text"
-              id="messageInput"
-              placeholder="Écrire un message..."
-              maxlength="200"
-            />
-            <button type="button" id="sendMsgBtn" class="btn btn-secondary btn-sm">
-              Envoyer
+          <!-- Action Hôte : démarrer la réunion pour tout le monde -->
+          <div id="hostControls" class="host-controls hidden">
+            <button type="button" id="startMeetingBtn" class="btn btn-primary btn-lg btn-full">
+              Démarrer la réunion pour tous →
             </button>
+            <p class="hint">
+              Tous les participants en attente seront automatiquement redirigés vers la salle vidéo.
+            </p>
+          </div>
+
+          <!-- Transition quand la réunion démarre -->
+          <div id="joinSection" class="join-banner hidden">
+            <p class="ready-text">La réunion vient de démarrer !</p>
+            <a id="joinRoomBtn" class="btn btn-primary btn-lg" href="#">
+              Entrer dans la salle vidéo →
+            </a>
+          </div>
+        </div>
+
+        <!-- Colonne droite : Participants & Chat d'attente -->
+        <div class="wait-col-side">
+          <div class="panel-box">
+            <div class="panel-title">
+              <span>Participants en attente</span>
+              <span class="count-pill" id="waitCount">0</span>
+            </div>
+            <ul id="participantsList" class="participants-list"></ul>
+          </div>
+
+          <div class="panel-box panel-box-grow">
+            <div class="panel-title">
+              <span>Messages rapides</span>
+            </div>
+            <ul id="waitMessagesList" class="wait-messages"></ul>
+            <div class="chat-input-row">
+              <input
+                type="text"
+                id="messageInput"
+                placeholder="Écrire un message..."
+                maxlength="200"
+              />
+              <button type="button" id="sendMsgBtn" class="btn btn-secondary btn-sm">
+                Envoyer
+              </button>
+            </div>
           </div>
         </div>
       </div>

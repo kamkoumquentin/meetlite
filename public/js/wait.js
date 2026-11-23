@@ -176,7 +176,10 @@
   copyWaitLinkBtn.addEventListener('click', async () => {
     const shareUrl = `${window.location.origin}/wait/${roomId}`;
     await MeetCommon.copyToClipboard(shareUrl);
+    const prevText = copyWaitLinkBtn.textContent;
+    copyWaitLinkBtn.textContent = 'Copié ✓';
     MeetCommon.showToast('Lien de la salle d\'attente copié');
+    setTimeout(() => { copyWaitLinkBtn.textContent = prevText; }, 1800);
   });
 
   // Envoi de message rapide

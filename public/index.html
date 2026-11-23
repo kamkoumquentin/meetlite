@@ -3,114 +3,174 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0b0f19" />
+  <meta name="theme-color" content="#090d16" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-  <title>MeetLite · Visioconférence & Salle d'attente</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <title>MeetLite · Visioconférence, Tableau Blanc & Studio 3D</title>
+  <link rel="stylesheet" href="/css/style.css?v=3" />
 </head>
 <body class="page-home">
   <div class="atmosphere"></div>
 
   <!-- Barre supérieure -->
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-dot"></span>
+    <a href="/" class="brand">
+      <img src="/icons/icon.svg" alt="" class="brand-logo" width="28" height="28" />
       <span class="brand-name">MeetLite</span>
+    </a>
+
+    <div class="topbar-meta">
+      <span class="badge-subtle">WebRTC • Tableau Blanc • Studio 3D</span>
+      <button type="button" id="pwaInstallBtn" class="btn btn-secondary btn-sm hidden">
+        Installer l'app
+      </button>
     </div>
-    <span class="badge-subtle">WebRTC · Temps réel</span>
   </header>
 
-  <!-- Contenu principal -->
+  <!-- Contenu principal héroïque -->
   <main class="home-main">
-    <section class="card card-hero">
-      <div class="hero-header">
-        <h1>Réunions vidéo légères, <span class="accent">sans friction</span>.</h1>
+    <div class="home-shell">
+      <div class="home-hero-intro">
+        <h1>Classe virtuelle & visioconférence <span class="accent">nouvelle génération</span>.</h1>
         <p class="subtitle">
-          Créez une salle avec accueil musical, puis basculez tous vos participants en visioconférence WebRTC en un clic.
+          Lancez une session en un clic avec salle d’attente musicale, tableau blanc synchronisé et studio 3D interactif.
         </p>
       </div>
 
-      <!-- Formulaire de création de réunion -->
-      <form id="createForm" class="stack">
-        <div class="field-row">
-          <div class="field">
-            <label for="titleInput">Nom de la réunion</label>
-            <input
-              type="text"
-              id="titleInput"
-              placeholder="Ex : Point produit hebdo"
-              value="Réunion d'équipe"
-              maxlength="80"
-              required
-            />
-          </div>
+      <div class="home-grid">
+        <!-- Carte 1 : Créer une salle -->
+        <section class="card card-home">
+          <div class="card-kicker">Hôte / Enseignant</div>
+          <h2>Créer une salle</h2>
+          <p class="card-desc">Générez un espace privé avec salle d’attente et contrôles d’animation.</p>
 
-          <div class="field">
-            <label for="hostNameInput">Votre nom (hôte)</label>
-            <input
-              type="text"
-              id="hostNameInput"
-              placeholder="Ex : Alex"
-              maxlength="40"
-              required
-            />
-          </div>
-        </div>
+          <form id="createForm" class="stack">
+            <div class="field">
+              <label for="titleInput">Titre de la séance</label>
+              <input
+                type="text"
+                id="titleInput"
+                placeholder="Ex : TP Mécanique & Électronique"
+                value="Réunion d'équipe"
+                maxlength="80"
+                required
+              />
+            </div>
 
-        <button type="submit" class="btn btn-primary btn-lg">
-          Créer une nouvelle réunion
-        </button>
-      </form>
+            <div class="field">
+              <label for="hostNameInput">Votre nom</label>
+              <input
+                type="text"
+                id="hostNameInput"
+                placeholder="Ex : Prof. Martin"
+                maxlength="40"
+                required
+              />
+            </div>
 
-      <!-- Résultat après création -->
-      <div id="createdPanel" class="created-panel hidden">
-        <div class="created-header">
-          <span class="status-pill status-ready">Salle prête</span>
-          <span class="room-code-tag" id="createdRoomCode"></span>
-        </div>
-
-        <div class="field">
-          <label for="waitingLinkInput">Lien de la salle d'attente (à partager aux participants)</label>
-          <div class="input-group">
-            <input type="text" id="waitingLinkInput" readonly />
-            <button type="button" class="btn btn-secondary btn-sm" data-copy="waitingLinkInput">
-              Copier
+            <button type="submit" class="btn btn-primary btn-lg btn-full">
+              <span>✨</span>
+              <span>Créer une nouvelle réunion</span>
             </button>
-          </div>
-        </div>
+          </form>
 
-        <div class="actions-row">
-          <a id="enterAsHostBtn" class="btn btn-primary btn-lg" href="#">
-            Rejoindre la salle d'attente (Hôte) →
-          </a>
-          <button type="button" id="createAnotherBtn" class="btn btn-ghost">
-            Nouvelle salle
-          </button>
-        </div>
+          <!-- Résultat après création -->
+          <div id="createdPanel" class="created-panel hidden">
+            <div class="created-header">
+              <span class="status-pill status-ready"><span class="pulse-dot"></span>Salle prête</span>
+              <span class="room-code-tag" id="createdRoomCode"></span>
+            </div>
+
+            <div class="field">
+              <label for="waitingLinkInput">Lien d’invitation (salle d’attente)</label>
+              <div class="input-group">
+                <input type="text" id="waitingLinkInput" readonly />
+                <button type="button" class="btn btn-secondary btn-sm" data-copy="waitingLinkInput">
+                  Copier
+                </button>
+              </div>
+            </div>
+
+            <div class="actions-row">
+              <a id="enterAsHostBtn" class="btn btn-primary btn-lg btn-full" href="#">
+                Entrer en tant qu’hôte →
+              </a>
+              <button type="button" id="createAnotherBtn" class="btn btn-ghost btn-full">
+                Créer une autre salle
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Carte 2 : Rejoindre une salle -->
+        <section class="card card-home card-home-secondary">
+          <div class="card-kicker">Participant / Étudiant</div>
+          <h2>Rejoindre une salle</h2>
+          <p class="card-desc">Collez un code de réunion ou un lien complet reçu de votre hôte.</p>
+
+          <form id="joinByCodeForm" class="stack">
+            <div class="field">
+              <label for="joinCodeInput">Code ou lien de la salle</label>
+              <input
+                type="text"
+                id="joinCodeInput"
+                placeholder="Ex : abc-defg-hij"
+                aria-label="Code de salle"
+                required
+              />
+            </div>
+
+            <div class="field">
+              <label for="joinGuestNameInput">Votre prénom / nom</label>
+              <input
+                type="text"
+                id="joinGuestNameInput"
+                placeholder="Ex : Camille"
+                maxlength="40"
+              />
+            </div>
+
+            <button type="submit" class="btn btn-secondary btn-lg btn-full">
+              Rejoindre la salle d’attente →
+            </button>
+          </form>
+        </section>
       </div>
 
-      <div class="divider"><span>ou rejoindre avec un code</span></div>
-
-      <!-- Rejoindre une salle existante -->
-      <form id="joinByCodeForm" class="join-inline">
-        <input
-          type="text"
-          id="joinCodeInput"
-          placeholder="Code de salle (ex : abc-defg-hij)"
-          aria-label="Code de salle"
-          required
-        />
-        <button type="submit" class="btn btn-secondary">Rejoindre</button>
-      </form>
-    </section>
+      <!-- 3 piliers visuels -->
+      <footer class="home-pillars" aria-label="Fonctionnalités clés">
+        <div class="pillar-item">
+          <span class="pillar-icon">📹</span>
+          <div>
+            <strong>Visio HD P2P</strong>
+            <span>WebRTC natif faible latence</span>
+          </div>
+        </div>
+        <div class="pillar-item">
+          <span class="pillar-icon">✏️</span>
+          <div>
+            <strong>Tableau blanc synchronisé</strong>
+            <span>Dessin, formes, texte & export PNG</span>
+          </div>
+        </div>
+        <div class="pillar-item">
+          <span class="pillar-icon">🧊</span>
+          <div>
+            <strong>Studio 3D interactif</strong>
+            <span>Vue éclatée, .GLB & repères 3D</span>
+          </div>
+        </div>
+      </footer>
+    </div>
   </main>
 
   <script src="/js/common.js"></script>
   <script>
-    // Gestion de la création et de l'accès rapide sur la page d'accueil
     (function () {
       const createForm = document.getElementById('createForm');
       const createdPanel = document.getElementById('createdPanel');
@@ -122,10 +182,32 @@
       const createAnotherBtn = document.getElementById('createAnotherBtn');
       const joinByCodeForm = document.getElementById('joinByCodeForm');
       const joinCodeInput = document.getElementById('joinCodeInput');
+      const joinGuestNameInput = document.getElementById('joinGuestNameInput');
+      const pwaInstallBtn = document.getElementById('pwaInstallBtn');
 
-      // Pré-remplir le nom si déjà enregistré
       const savedName = MeetCommon.getUserName();
-      if (savedName) hostNameInput.value = savedName;
+      if (savedName) {
+        hostNameInput.value = savedName;
+        if (joinGuestNameInput) joinGuestNameInput.value = savedName;
+      }
+
+      // Bouton d'installation PWA si supporté par le navigateur
+      let deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (pwaInstallBtn) pwaInstallBtn.classList.remove('hidden');
+      });
+
+      if (pwaInstallBtn) {
+        pwaInstallBtn.addEventListener('click', async () => {
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          pwaInstallBtn.classList.add('hidden');
+        });
+      }
 
       createForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -156,7 +238,7 @@
           createForm.classList.add('hidden');
           createdPanel.classList.remove('hidden');
         } catch (err) {
-          MeetCommon.showToast('Impossible de créer la salle. Réessayez.', 'error');
+          MeetCommon.showToast('Impossible de créer la salle. Réessayez.');
         }
       });
 
@@ -170,7 +252,10 @@
           const targetId = btn.getAttribute('data-copy');
           const input = document.getElementById(targetId);
           await MeetCommon.copyToClipboard(input.value);
+          const prevText = btn.textContent;
+          btn.textContent = 'Copié ✓';
           MeetCommon.showToast('Lien copié dans le presse-papiers');
+          setTimeout(() => { btn.textContent = prevText; }, 1800);
         });
       });
 
@@ -178,7 +263,9 @@
         e.preventDefault();
         const raw = joinCodeInput.value.trim();
         if (!raw) return;
-        // Accepte un code brut ou une URL complète
+        if (joinGuestNameInput && joinGuestNameInput.value.trim()) {
+          MeetCommon.setUserName(joinGuestNameInput.value.trim());
+        }
         const code = raw.includes('/') ? raw.split('/').filter(Boolean).pop() : raw;
         window.location.href = `/wait/${encodeURIComponent(code)}`;
       });

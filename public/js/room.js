@@ -146,6 +146,7 @@
     dom.localAvatarInitials.textContent = getInitials(userName);
 
     bindUIEvents();
+    setupTileInteractions(dom.localTile);
     registerSocketHandlers();
 
     if (window.MeetWhiteboard) {
@@ -669,7 +670,10 @@
       pinBtn.title = 'Épingler / Détacher';
       pinBtn.setAttribute('aria-label', 'Épingler la vidéo');
       pinBtn.textContent = '📌';
-      pinBtn.addEventListener('click', () => togglePinTile(`tile-${peerId}`));
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePinTile(`tile-${peerId}`);
+      });
 
       const handBadge = document.createElement('span');
       handBadge.className = `hand-indicator${meta.handRaised ? '' : ' hidden'}`;
@@ -686,6 +690,7 @@
       tile.appendChild(overlay);
 
       dom.videoGrid.appendChild(tile);
+      setupTileInteractions(tile);
       updateVideoGridLayout();
     }
 
@@ -724,6 +729,133 @@
   function updateVideoGridLayout() {
     const count = dom.videoGrid.querySelectorAll('.video-tile').length;
     dom.videoGrid.setAttribute('data-count', String(count));
+    if (count !== 2) {
+      dom.videoGrid.classList.remove('is-pip-swapped');
+      resetAllTileInlinePositions();
+    }
+  }
+
+  function resetAllTileInlinePositions() {
+    dom.videoGrid.querySelectorAll('.video-tile').forEach((t) => {
+      t.style.left = '';
+      t.style.top = '';
+      t.style.right = '';
+      t.style.bottom = '';
+    });
+  }
+
+  function isFloatingPipTile(tile) {
+    const count = dom.videoGrid.querySelectorAll('.video-tile').length;
+    const stage = dom.videoGrid.parentElement;
+    if (count !== 2 || dom.videoGrid.classList.contains('has-pinned')) return false;
+    if (stage && (stage.classList.contains('has-whiteboard') || stage.classList.contains('has-studio3d'))) {
+      return false;
+    }
+    const swapped = dom.videoGrid.classList.contains('is-pip-swapped');
+    return swapped ? !tile.classList.contains('is-local') : tile.classList.contains('is-local');
+  }
+
+  function setupTileInteractions(tile) {
+    if (!tile || tile.dataset.interactive === '1') return;
+    tile.dataset.interactive = '1';
+    tile.setAttribute('draggable', 'true');
+
+    // 1. Glisser-déposer pour réorganiser les vignettes en grille (>= 3 personnes)
+    tile.addEventListener('dragstart', (e) => {
+      if (isFloatingPipTile(tile)) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData('text/plain', tile.id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    tile.addEventListener('dragover', (e) => {
+      if (isFloatingPipTile(tile)) return;
+      e.preventDefault();
+      tile.classList.add('is-drag-over');
+    });
+
+    tile.addEventListener('dragleave', () => {
+      tile.classList.remove('is-drag-over');
+    });
+
+    tile.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tile.classList.remove('is-drag-over');
+      const sourceId = e.dataTransfer.getData('text/plain');
+      if (!sourceId || sourceId === tile.id) return;
+      const sourceTile = document.getElementById(sourceId);
+      if (!sourceTile || sourceTile.parentElement !== dom.videoGrid) return;
+
+      // Échanger les deux vignettes dans le DOM
+      const placeholder = document.createElement('div');
+      dom.videoGrid.insertBefore(placeholder, sourceTile);
+      dom.videoGrid.insertBefore(sourceTile, tile);
+      dom.videoGrid.insertBefore(tile, placeholder);
+      placeholder.remove();
+    });
+
+    // 2. Déplacement libre de la vignette PiP (souris + tactile) & clic pour interchanger
+    let pointerActive = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let origLeft = 0;
+    let origTop = 0;
+
+    tile.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.pin-btn')) return;
+      if (!isFloatingPipTile(tile)) return;
+
+      pointerActive = true;
+      moved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      const gridRect = dom.videoGrid.getBoundingClientRect();
+      const tileRect = tile.getBoundingClientRect();
+      origLeft = tileRect.left - gridRect.left;
+      origTop = tileRect.top - gridRect.top;
+      tile.setPointerCapture(e.pointerId);
+    });
+
+    tile.addEventListener('pointermove', (e) => {
+      if (!pointerActive) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < 6) return;
+
+      moved = true;
+      const gridRect = dom.videoGrid.getBoundingClientRect();
+      const maxLeft = Math.max(0, gridRect.width - tile.offsetWidth);
+      const maxTop = Math.max(0, gridRect.height - tile.offsetHeight);
+      const nextLeft = Math.max(0, Math.min(maxLeft, origLeft + dx));
+      const nextTop = Math.max(0, Math.min(maxTop, origTop + dy));
+
+      tile.style.right = 'auto';
+      tile.style.bottom = 'auto';
+      tile.style.left = `${nextLeft}px`;
+      tile.style.top = `${nextTop}px`;
+    });
+
+    tile.addEventListener('pointerup', (e) => {
+      if (pointerActive) {
+        pointerActive = false;
+        try { tile.releasePointerCapture(e.pointerId); } catch (_err) {}
+        if (!moved) {
+          dom.videoGrid.classList.toggle('is-pip-swapped');
+          resetAllTileInlinePositions();
+        }
+      }
+    });
+
+    // 3. Clic sur une miniature en mode épinglé -> basculer cette personne en grand format
+    tile.addEventListener('click', (e) => {
+      if (e.target.closest('.pin-btn')) return;
+      if (dom.videoGrid.classList.contains('has-pinned') && !tile.classList.contains('is-pinned')) {
+        pinTile(tile.id, { isAuto: false });
+      }
+    });
   }
 
   /**
@@ -886,7 +1018,10 @@
     dom.camSelect.addEventListener('change', (e) => switchVideoDevice(e.target.value));
 
     dom.leaveCallBtn.addEventListener('click', leaveMeeting);
-    dom.localPinBtn.addEventListener('click', () => togglePinTile('localTile'));
+    dom.localPinBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePinTile('localTile');
+    });
 
     dom.toggleChatBtn.addEventListener('click', () => toggleSidePanel('chat'));
     dom.toggleParticipantsBtn.addEventListener('click', () => toggleSidePanel('participants'));
