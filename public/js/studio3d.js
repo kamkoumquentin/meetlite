@@ -9,9 +9,9 @@
  *  - Synchronisation caméra enseignant -> étudiants (throttlée 60 ms)
  */
 
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
 let socketRef = null;
 let roomIdRef = '';
@@ -212,7 +212,7 @@ function loadState(state) {
   if (!state) return;
 
   if (state.modelType === 'custom' && state.glbData) {
-    loadGLBFromDataUrl(state.glbData, state.fileName || 'Modèle importé');
+    loadGLBFromBase64(state.glbData, state.fileName || 'Modèle importé');
   } else if (state.modelType) {
     dom.modelSelect.value = state.modelType;
     loadBuiltInModel(state.modelType, { emit: false });
@@ -249,29 +249,36 @@ function bindUIEvents() {
     loadBuiltInModel(modelType, { emit: true });
   });
 
-  dom.importInput.addEventListener('change', (e) => {
+  dom.importInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
       if (window.MeetCommon) MeetCommon.showToast('Fichier trop volumineux (max 8 Mo).');
+      e.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
-      loadGLBFromDataUrl(dataUrl, file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      parseGLBBuffer(arrayBuffer, file.name);
+
       if (socketRef) {
+        const base64Data = arrayBufferToBase64(arrayBuffer);
         socketRef.emit('3d-select-model', {
           roomId: roomIdRef,
           modelType: 'custom',
-          glbData: dataUrl,
+          glbData: base64Data,
           fileName: file.name
         });
       }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err) {
+      console.error('[Studio3D] Erreur GLTF:', err);
+      if (window.MeetCommon) {
+        MeetCommon.showToast(`Erreur import 3D : ${err?.message || 'lecture impossible'}`);
+      }
+    } finally {
+      e.target.value = '';
+    }
   });
 
   dom.explodeSlider.addEventListener('input', (e) => {
@@ -417,7 +424,7 @@ function registerSocketEvents() {
 
   socketRef.on('3d-select-model', ({ modelType, glbData, fileName } = {}) => {
     if (modelType === 'custom' && glbData) {
-      loadGLBFromDataUrl(glbData, fileName || 'Modèle partagé');
+      loadGLBFromBase64(glbData, fileName || 'Modèle partagé');
     } else if (modelType) {
       dom.modelSelect.value = modelType;
       loadBuiltInModel(modelType, { emit: false });
@@ -480,19 +487,60 @@ function loadBuiltInModel(type, { emit = true } = {}) {
   }
 }
 
-function loadGLBFromDataUrl(dataUrl, fileName) {
-  gltfLoader.load(
-    dataUrl,
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64Str) {
+  const clean = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function loadGLBFromBase64(base64Data, fileName) {
+  try {
+    const buffer = base64ToArrayBuffer(base64Data);
+    parseGLBBuffer(buffer, fileName);
+  } catch (err) {
+    console.error('[Studio3D] Erreur GLTF:', err);
+    if (window.MeetCommon) {
+      MeetCommon.showToast(`Erreur décodage 3D : ${err?.message || 'données invalides'}`);
+    }
+  }
+}
+
+function parseGLBBuffer(arrayBuffer, fileName) {
+  gltfLoader.parse(
+    arrayBuffer,
+    '',
     (gltf) => {
-      const root = gltf.scene;
-      // Normaliser la taille et centrer le modèle importé
+      const root = gltf.scene || gltf.scenes?.[0];
+      if (!root) {
+        const err = new Error('Scène 3D vide dans le fichier.');
+        console.error('[Studio3D] Erreur GLTF:', err);
+        if (window.MeetCommon) MeetCommon.showToast(`Erreur import 3D : ${err.message}`);
+        return;
+      }
+
+      // Centrer et normaliser l'échelle autour de 3 unités
       const box = new THREE.Box3().setFromObject(root);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
       const scale = 3.0 / maxDim;
 
-      root.scale.setScalar(scale);
+      root.scale.multiplyScalar(scale);
       root.position.sub(center.multiplyScalar(scale));
 
       const wrapper = new THREE.Group();
@@ -503,10 +551,11 @@ function loadGLBFromDataUrl(dataUrl, fileName) {
         MeetCommon.showToast(`Modèle chargé : ${fileName}`);
       }
     },
-    undefined,
-    () => {
+    (err) => {
+      console.error('[Studio3D] Erreur GLTF:', err);
+      const reason = err?.message || 'format .glb/.gltf invalide ou textures externes manquantes';
       if (window.MeetCommon) {
-        MeetCommon.showToast('Impossible de charger le fichier .GLB');
+        MeetCommon.showToast(`Erreur import 3D : ${reason}`);
       }
     }
   );
