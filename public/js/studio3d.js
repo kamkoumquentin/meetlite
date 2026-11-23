@@ -93,7 +93,10 @@ function setupThreeScene() {
   controls.minDistance = 1.4;
   controls.maxDistance = 14;
 
-  // Éclairage studio
+  // Éclairage studio + HemisphereLight de secours
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 1.5);
+  scene.add(hemiLight);
+
   const ambient = new THREE.AmbientLight(0xffffff, 0.65);
   scene.add(ambient);
 
@@ -140,9 +143,8 @@ function setupThreeScene() {
 
 function resizeRenderer() {
   if (!renderer || !camera || !dom.mount) return;
-  const w = dom.mount.clientWidth;
-  const h = dom.mount.clientHeight;
-  if (!w || !h) return;
+  const w = dom.mount.clientWidth || window.innerWidth || 640;
+  const h = dom.mount.clientHeight || Math.max(240, window.innerHeight - 140);
 
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -533,19 +535,33 @@ function parseGLBBuffer(arrayBuffer, fileName) {
         return;
       }
 
-      // Centrer et normaliser l'échelle autour de 3 unités
+      // Normalisation des normales et matériaux
+      enhanceModelMaterials(root);
+
+      // Mise à l'échelle à 3.2 unités max et recentrage de la base sur (0, 0, 0)
+      root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(root);
       const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = 3.0 / maxDim;
-
+      const scale = 3.2 / maxDim;
       root.scale.multiplyScalar(scale);
-      root.position.sub(center.multiplyScalar(scale));
+
+      root.updateMatrixWorld(true);
+      const scaledBox = new THREE.Box3().setFromObject(root);
+      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+      root.position.x -= scaledCenter.x;
+      root.position.z -= scaledCenter.z;
+      root.position.y -= scaledBox.min.y;
 
       const wrapper = new THREE.Group();
       wrapper.add(root);
       setCurrentModel(wrapper);
+
+      // Replacer la caméra face au modèle importé
+      camera.position.set(4, 3, 5);
+      controls.target.set(0, 1, 0);
+      controls.update();
+      resizeRenderer();
 
       if (window.MeetCommon) {
         MeetCommon.showToast(`Modèle chargé : ${fileName}`);
@@ -561,7 +577,45 @@ function parseGLBBuffer(arrayBuffer, fileName) {
   );
 }
 
+function enhanceModelMaterials(model) {
+  model.traverse((child) => {
+    if (!child.isMesh) return;
+
+    if (child.geometry && !child.geometry.attributes.normal) {
+      child.geometry.computeVertexNormals();
+    }
+
+    const fixMat = (mat) => {
+      if (!mat) {
+        return new THREE.MeshStandardMaterial({
+          color: 0x60a5fa,
+          roughness: 0.4,
+          metalness: 0.3,
+          side: THREE.DoubleSide
+        });
+      }
+      const isBlackWithoutMap = !mat.map && mat.color && mat.color.r === 0 && mat.color.g === 0 && mat.color.b === 0;
+      if (isBlackWithoutMap) {
+        return new THREE.MeshStandardMaterial({
+          color: 0x60a5fa,
+          roughness: 0.4,
+          metalness: 0.3,
+          side: THREE.DoubleSide
+        });
+      }
+      mat.side = THREE.DoubleSide;
+      mat.needsUpdate = true;
+      return mat;
+    };
+
+    child.material = Array.isArray(child.material)
+      ? child.material.map(fixMat)
+      : fixMat(child.material);
+  });
+}
+
 function prepareExplodableModel(group) {
+  enhanceModelMaterials(group);
   const groupBox = new THREE.Box3().setFromObject(group);
   const groupCenter = groupBox.getCenter(new THREE.Vector3());
 
