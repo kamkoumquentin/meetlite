@@ -73,6 +73,60 @@
       <!-- Couche de réactions flottantes -->
       <div id="reactionsLayer" class="reactions-layer" aria-hidden="true"></div>
 
+      <!-- Tableau blanc collaboratif superposé -->
+      <div id="whiteboardContainer" class="wb-container hidden" aria-label="Tableau blanc collaboratif">
+        <div class="wb-toolbar">
+          <div class="wb-group" role="group" aria-label="Outils de dessin">
+            <button type="button" class="wb-btn wb-tool-btn active" data-tool="pen" title="Stylo">✏️</button>
+            <button type="button" class="wb-btn wb-tool-btn" data-tool="line" title="Ligne">📏</button>
+            <button type="button" class="wb-btn wb-tool-btn" data-tool="rect" title="Rectangle">⬜</button>
+            <button type="button" class="wb-btn wb-tool-btn" data-tool="circle" title="Cercle">⭕</button>
+            <button type="button" class="wb-btn wb-tool-btn" data-tool="text" title="Texte">🔤</button>
+            <button type="button" class="wb-btn wb-tool-btn" data-tool="eraser" title="Gomme">🧹</button>
+          </div>
+
+          <div class="wb-sep"></div>
+
+          <div class="wb-group" role="group" aria-label="Couleurs">
+            <button type="button" class="wb-color-btn active" data-color="#ffffff" style="background:#ffffff" title="Blanc"></button>
+            <button type="button" class="wb-color-btn" data-color="#3b82f6" style="background:#3b82f6" title="Bleu"></button>
+            <button type="button" class="wb-color-btn" data-color="#10b981" style="background:#10b981" title="Vert"></button>
+            <button type="button" class="wb-color-btn" data-color="#f59e0b" style="background:#f59e0b" title="Ambre"></button>
+            <button type="button" class="wb-color-btn" data-color="#ef4444" style="background:#ef4444" title="Rouge"></button>
+            <button type="button" class="wb-color-btn" data-color="#a855f7" style="background:#a855f7" title="Violet"></button>
+          </div>
+
+          <div class="wb-sep"></div>
+
+          <div class="wb-group" role="group" aria-label="Épaisseur du trait">
+            <button type="button" class="wb-btn wb-size-btn" data-size="2" title="Fin">Fin</button>
+            <button type="button" class="wb-btn wb-size-btn active" data-size="5" title="Moyen">Moyen</button>
+            <button type="button" class="wb-btn wb-size-btn" data-size="10" title="Épais">Épais</button>
+          </div>
+
+          <div class="wb-sep"></div>
+
+          <div class="wb-group wb-actions">
+            <button type="button" id="wbThemeBtn" class="wb-btn" title="Basculer fond sombre / clair">🌓</button>
+            <button type="button" id="wbClearBtn" class="wb-btn wb-btn-danger" title="Tout effacer">🗑️</button>
+            <button type="button" id="wbExportBtn" class="wb-btn" title="Exporter en PNG">💾 PNG</button>
+            <button type="button" id="wbCloseBtn" class="wb-btn" title="Fermer le tableau">✕</button>
+          </div>
+        </div>
+
+        <div id="wbCanvasWrap" class="wb-canvas-wrap wb-theme-dark">
+          <canvas id="whiteboardCanvas"></canvas>
+          <canvas id="whiteboardPreviewCanvas"></canvas>
+          <input
+            type="text"
+            id="wbTextInput"
+            class="wb-text-input hidden"
+            placeholder="Texte + Entrée..."
+            maxlength="120"
+          />
+        </div>
+      </div>
+
       <!-- Alerte non bloquante en cas d'erreur média (permission refusée, etc.) -->
       <div id="mediaAlert" class="media-alert hidden" role="alert"></div>
 
@@ -152,6 +206,11 @@
       <button type="button" id="toggleHandBtn" class="ctrl-btn" title="Lever / Baisser la main">
         <span class="ctrl-icon">✋</span>
         <span class="ctrl-label">Main</span>
+      </button>
+
+      <button type="button" id="toggleWhiteboardBtn" class="ctrl-btn" title="Tableau blanc collaboratif">
+        <span class="ctrl-icon">✏️</span>
+        <span class="ctrl-label">Tableau</span>
       </button>
 
       <div class="reaction-wrapper">
@@ -245,6 +304,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/whiteboard.js"></script>
   <script src="/js/room.js"></script>
 </body>
 </html>

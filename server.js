@@ -140,7 +140,8 @@ app.post('/api/rooms', (req, res) => {
     waitingParticipants: new Map(),
     roomParticipants: new Map(),
     messages: [],
-    roomMessages: []
+    roomMessages: [],
+    whiteboardHistory: []
   };
 
   rooms.set(roomId, room);
@@ -315,7 +316,8 @@ io.on('connection', (socket) => {
       selfId: socket.id,
       selfIsHost: verifiedHost,
       peers: existingPeers,
-      messages: room.roomMessages
+      messages: room.roomMessages,
+      whiteboardHistory: room.whiteboardHistory
     });
 
     socket.to(roomChannel).emit('user-joined', participant);
@@ -435,6 +437,42 @@ io.on('connection', (socket) => {
     if (room.roomMessages.length > 50) room.roomMessages.shift();
 
     io.to(`room:${roomId}`).emit('room-chat', chatMsg);
+  });
+
+  // --------------------------------------------------------------------------
+  // 2B. TABLEAU BLANC COLLABORATIF (WHITEBOARD)
+  // --------------------------------------------------------------------------
+
+  socket.on('wb-draw', ({ roomId, action } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId || !action) return;
+
+    room.lastActiveAt = Date.now();
+    room.whiteboardHistory.push(action);
+    if (room.whiteboardHistory.length > 2000) {
+      room.whiteboardHistory.shift();
+    }
+
+    socket.to(`room:${roomId}`).emit('wb-draw', action);
+  });
+
+  socket.on('wb-clear', ({ roomId } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.whiteboardHistory = [];
+    io.to(`room:${roomId}`).emit('wb-clear');
+  });
+
+  socket.on('wb-toggle', ({ roomId, name, isOpen } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    socket.to(`room:${roomId}`).emit('wb-toggle', {
+      name: (name || 'Un participant').trim().slice(0, 40),
+      isOpen: Boolean(isOpen)
+    });
   });
 
   // --------------------------------------------------------------------------

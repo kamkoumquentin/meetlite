@@ -110,6 +110,7 @@
     toggleScreenBtn: document.getElementById('toggleScreenBtn'),
     toggleRecordBtn: document.getElementById('toggleRecordBtn'),
     toggleHandBtn: document.getElementById('toggleHandBtn'),
+    toggleWhiteboardBtn: document.getElementById('toggleWhiteboardBtn'),
     toggleReactionsBtn: document.getElementById('toggleReactionsBtn'),
     reactionsPicker: document.getElementById('reactionsPicker'),
     openSettingsBtn: document.getElementById('openSettingsBtn'),
@@ -145,6 +146,17 @@
 
     bindUIEvents();
     registerSocketHandlers();
+
+    if (window.MeetWhiteboard) {
+      MeetWhiteboard.init({
+        socket,
+        roomId,
+        userName,
+        onToggle: (isOpen) => {
+          dom.toggleWhiteboardBtn.classList.toggle('active', isOpen);
+        }
+      });
+    }
 
     await Promise.all([loadIceServers(), initLocalMedia()]);
     if (localStream) {
@@ -294,7 +306,7 @@
     });
 
     // Confirmation d'entrée dans la salle : on initie une offre vers chaque pair existant
-    socket.on('room-joined', async ({ title, selfIsHost, peers, messages }) => {
+    socket.on('room-joined', async ({ title, selfIsHost, peers, messages, whiteboardHistory }) => {
       dom.roomTitle.textContent = title || 'Réunion';
       if (typeof selfIsHost === 'boolean') {
         isHost = selfIsHost;
@@ -302,6 +314,11 @@
 
       // Restaurer l'historique du chat sans incrémenter le badge non-lu
       (messages || []).forEach((msg) => appendChatMessage(msg, { countUnread: false }));
+
+      // Restaurer l'historique du tableau blanc
+      if (window.MeetWhiteboard && Array.isArray(whiteboardHistory)) {
+        MeetWhiteboard.loadHistory(whiteboardHistory);
+      }
 
       for (const peer of peers) {
         peerMetadata.set(peer.socketId, {
@@ -814,6 +831,9 @@
     dom.toggleScreenBtn.addEventListener('click', toggleScreenShare);
     dom.toggleRecordBtn.addEventListener('click', toggleRecording);
     dom.toggleHandBtn.addEventListener('click', toggleHandRaise);
+    dom.toggleWhiteboardBtn.addEventListener('click', () => {
+      if (window.MeetWhiteboard) MeetWhiteboard.toggle();
+    });
     dom.toggleReactionsBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       dom.reactionsPicker.classList.toggle('hidden');
