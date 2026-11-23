@@ -33,7 +33,13 @@
   };
   let rtcConfig = { ...RTC_CONFIG };
 
-  const socket = io();
+  const socket = io({
+    transports: ['websocket'],
+    upgrade: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000
+  });
 
   // Flux locaux
   let localStream = null;

@@ -23,7 +23,10 @@ const io = new Server(server, {
     origin: '*',
     methods: ['GET', 'POST']
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket'],
+  allowEIO3: false,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Middlewares Express
@@ -163,6 +166,8 @@ app.get('/api/rooms/:roomId', (req, res) => {
 });
 
 // Routes pages HTML
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
 app.get('/', (_req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });

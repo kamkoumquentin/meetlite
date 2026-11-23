@@ -8,7 +8,13 @@
   let isHost = Boolean(hostToken) || MeetCommon.isHostFromQuery();
   const userName = MeetCommon.ensureUserName(isHost ? 'Hôte' : 'Participant');
 
-  const socket = io();
+  const socket = io({
+    transports: ['websocket'],
+    upgrade: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000
+  });
 
   // Éléments DOM
   const roomCodeTag = document.getElementById('roomCodeTag');
