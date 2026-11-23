@@ -9,9 +9,9 @@
  *  - Synchronisation caméra enseignant -> étudiants (throttlée 60 ms)
  */
 
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 let socketRef = null;
 let roomIdRef = '';
@@ -179,7 +179,20 @@ function open({ remote = false } = {}) {
   isOpen = true;
   dom.container.classList.remove('hidden');
   if (onToggleCallback) onToggleCallback(true);
-  requestAnimationFrame(resizeRenderer);
+
+  if (!renderer) {
+    setupThreeScene();
+  }
+  if (!currentModelGroup) {
+    loadBuiltInModel('arduino', { emit: false });
+  }
+
+  requestAnimationFrame(() => {
+    resizeRenderer();
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
+    }
+  });
 
   if (!remote && socketRef) {
     socketRef.emit('3d-state-change', {
@@ -538,20 +551,18 @@ function parseGLBBuffer(arrayBuffer, fileName) {
       // Normalisation des normales et matériaux
       enhanceModelMaterials(root);
 
-      // Mise à l'échelle à 3.2 unités max et recentrage de la base sur (0, 0, 0)
+      // Mise à l'échelle à 3 unités max et centrage sur (0, 0, 0)
       root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(root);
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = 3.2 / maxDim;
+      const scale = 3.0 / maxDim;
       root.scale.multiplyScalar(scale);
 
       root.updateMatrixWorld(true);
       const scaledBox = new THREE.Box3().setFromObject(root);
       const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-      root.position.x -= scaledCenter.x;
-      root.position.z -= scaledCenter.z;
-      root.position.y -= scaledBox.min.y;
+      root.position.sub(scaledCenter);
 
       const wrapper = new THREE.Group();
       wrapper.add(root);
