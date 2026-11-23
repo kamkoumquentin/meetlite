@@ -26,9 +26,7 @@
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' }
+      { urls: 'stun:stun.cloudflare.com:3478' }
     ]
   };
   let rtcConfig = { ...RTC_CONFIG };
@@ -44,6 +42,7 @@
   // Flux locaux
   let localStream = null;
   let screenStream = null;
+  let mediaInitPromise = null;
   let audioEnabled = false;
   let videoEnabled = false;
   let screenEnabled = false;
@@ -68,6 +67,7 @@
   const remoteStreams = new Map();        // Map<socketId, MediaStream>
   const peerMetadata = new Map();         // Map<socketId, { name: string, isHost: boolean, mediaState: object }>
   const pendingIceCandidates = new Map(); // Map<socketId, RTCIceCandidateInit[]>
+  const makingOffer = new Map();          // Map<socketId, boolean>
 
   // Références DOM
   const dom = {
@@ -168,7 +168,8 @@
 
     initStudio3DModule();
 
-    await Promise.all([loadIceServers(), initLocalMedia()]);
+    mediaInitPromise = Promise.all([loadIceServers(), initLocalMedia()]);
+    await mediaInitPromise;
     if (localStream) {
       dom.prejoinVideo.srcObject = localStream;
     }
@@ -188,9 +189,14 @@
     }
   }
 
-  function enterMeetingFromGreenRoom() {
+  async function enterMeetingFromGreenRoom() {
     if (hasJoinedRoom) return;
     hasJoinedRoom = true;
+
+    // Garantir que getUserMedia et /api/ice-servers sont terminés avant join-room
+    if (mediaInitPromise) {
+      await mediaInitPromise;
+    }
 
     const chosenName = dom.prejoinNameInput.value.trim() || userName;
     userName = chosenName;
@@ -471,6 +477,12 @@
 
     // Réception des pistes distantes -> stockage dans remoteStreams + affichage
     pc.ontrack = (event) => {
+      console.log(
+        `[WebRTC] ${peerId} ontrack:`,
+        event.track.kind,
+        `enabled=${event.track.enabled}`,
+        `readyState=${event.track.readyState}`
+      );
       let stream = event.streams && event.streams[0];
       if (!stream) {
         stream = remoteStreams.get(peerId) || new MediaStream();
@@ -478,6 +490,20 @@
       }
       remoteStreams.set(peerId, stream);
       renderRemoteVideoTile(peerId, stream);
+    };
+
+    // Renégociation automatique sécurisée si une piste est ajoutée/modifiée après coup
+    pc.onnegotiationneeded = async () => {
+      if (makingOffer.get(peerId)) return;
+      try {
+        makingOffer.set(peerId, true);
+        await pc.setLocalDescription();
+        socket.emit('offer', { to: peerId, offer: pc.localDescription });
+      } catch (err) {
+        console.warn(`[WebRTC] ${peerId} negotiationneeded error:`, err);
+      } finally {
+        makingOffer.set(peerId, false);
+      }
     };
 
     // Envoi des candidats ICE découverts vers le pair via Socket.io
@@ -490,9 +516,12 @@
       }
     };
 
-    // Surveillance de l'état ICE / connexion
+    // Surveillance de l'état ICE / connexion + badge sur la tuile
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') {
+      const state = pc.iceConnectionState;
+      console.log(`[WebRTC] ${peerId} ICE state: ${state}`);
+      updateRemoteIceBadge(peerId, state);
+      if (state === 'failed') {
         MeetCommon.showToast('Connexion vidéo bloquée entre réseaux (TURN requis sur 4G/pare-feu).');
       }
     };
@@ -510,19 +539,16 @@
 
   function attachLocalTracksToPeer(pc) {
     if (localStream) {
-      localStream.getAudioTracks().forEach((track) => {
+      localStream.getTracks().forEach((track) => {
+        if (screenEnabled && screenStream && track.kind === 'video') return;
         pc.addTrack(track, localStream);
       });
     }
 
-    const activeVideoTrack = screenEnabled && screenStream
-      ? screenStream.getVideoTracks()[0]
-      : localStream?.getVideoTracks()[0];
-
-    if (activeVideoTrack) {
-      const sourceStream = screenEnabled && screenStream ? screenStream : localStream;
-      pc.addTrack(activeVideoTrack, sourceStream);
-    } else {
+    if (screenEnabled && screenStream) {
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (screenTrack) pc.addTrack(screenTrack, screenStream);
+    } else if (!localStream || localStream.getVideoTracks().length === 0) {
       // Prépare un sender vidéo vide pour permettre le partage d'écran ultérieur sans renégociation
       pc.addTransceiver('video', { direction: 'sendrecv' });
     }
@@ -534,6 +560,7 @@
   async function initiateOfferToPeer(peerId) {
     const pc = createPeerConnection(peerId);
     try {
+      makingOffer.set(peerId, true);
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
@@ -542,6 +569,8 @@
       socket.emit('offer', { to: peerId, offer: pc.localDescription });
     } catch (err) {
       console.error(`Erreur création offre pour ${peerId}:`, err);
+    } finally {
+      makingOffer.set(peerId, false);
     }
   }
 
@@ -633,6 +662,7 @@
 
     peerMetadata.delete(peerId);
     pendingIceCandidates.delete(peerId);
+    makingOffer.delete(peerId);
     stopAudioMonitor(peerId);
 
     const tileId = `tile-${peerId}`;
@@ -702,11 +732,17 @@
       handBadge.title = 'Main levée';
       handBadge.textContent = '✋';
 
+      const iceBadge = document.createElement('span');
+      iceBadge.className = 'ice-status-badge ice-checking';
+      iceBadge.id = `ice-${peerId}`;
+      iceBadge.textContent = 'Connexion réseau...';
+
       overlay.appendChild(label);
       overlay.appendChild(badges);
       tile.appendChild(video);
       tile.appendChild(avatar);
       tile.appendChild(handBadge);
+      tile.appendChild(iceBadge);
       tile.appendChild(pinBtn);
       tile.appendChild(overlay);
 
@@ -728,6 +764,22 @@
     videoEl.play().catch(() => {});
     if (stream.getAudioTracks().length > 0) {
       startAudioMonitor(peerId, stream, tile);
+    }
+  }
+
+  function updateRemoteIceBadge(peerId, state) {
+    const badge = document.getElementById(`ice-${peerId}`);
+    if (!badge) return;
+
+    badge.classList.remove('hidden', 'ice-checking', 'ice-failed');
+    if (state === 'connected' || state === 'completed') {
+      badge.classList.add('hidden');
+    } else if (state === 'failed' || state === 'disconnected') {
+      badge.textContent = 'Réseau bloqué (TURN requis)';
+      badge.classList.add('ice-failed');
+    } else {
+      badge.textContent = 'Connexion réseau...';
+      badge.classList.add('ice-checking');
     }
   }
 

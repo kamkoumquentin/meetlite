@@ -105,18 +105,22 @@ app.get('/api/ice-servers', (_req, res) => {
   const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' }
+    { urls: 'stun:stun.cloudflare.com:3478' }
   ];
 
   const { TURN_URL, TURN_USERNAME, TURN_CREDENTIAL } = process.env;
   if (TURN_URL && TURN_USERNAME && TURN_CREDENTIAL) {
-    iceServers.push({
-      urls: TURN_URL,
-      username: TURN_USERNAME,
-      credential: TURN_CREDENTIAL
-    });
+    const turnUrls = TURN_URL.split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+
+    if (turnUrls.length > 0) {
+      iceServers.push({
+        urls: turnUrls,
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL
+      });
+    }
   }
 
   res.json({ iceServers });
