@@ -26,7 +26,8 @@ const io = new Server(server, {
   transports: ['websocket'],
   allowEIO3: false,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e7
 });
 
 // Middlewares Express
@@ -142,7 +143,16 @@ app.post('/api/rooms', (req, res) => {
     messages: [],
     roomMessages: [],
     whiteboardHistory: [],
-    whiteboardOpen: false
+    whiteboardOpen: false,
+    studio3d: {
+      open: false,
+      modelType: 'arduino',
+      glbData: null,
+      fileName: '',
+      explode: 0,
+      pins: [],
+      camera: null
+    }
   };
 
   rooms.set(roomId, room);
@@ -319,7 +329,8 @@ io.on('connection', (socket) => {
       peers: existingPeers,
       messages: room.roomMessages,
       whiteboardHistory: room.whiteboardHistory,
-      whiteboardOpen: room.whiteboardOpen
+      whiteboardOpen: room.whiteboardOpen,
+      studio3d: room.studio3d
     });
 
     socket.to(roomChannel).emit('user-joined', participant);
@@ -502,6 +513,76 @@ io.on('connection', (socket) => {
       openedBy: room.whiteboardOpen ? (name || 'Un participant').trim().slice(0, 40) : undefined,
       closedBy: !room.whiteboardOpen ? (name || 'Un participant').trim().slice(0, 40) : undefined
     });
+  });
+
+  // --------------------------------------------------------------------------
+  // 2C. STUDIO 3D COLLABORATIF (THREE.JS)
+  // --------------------------------------------------------------------------
+
+  socket.on('3d-state-change', ({ roomId, open, name } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.open = Boolean(open);
+    io.to(`room:${roomId}`).emit('3d-state-change', {
+      open: room.studio3d.open,
+      openedBy: (name || 'Un participant').trim().slice(0, 40)
+    });
+  });
+
+  socket.on('3d-select-model', ({ roomId, modelType, glbData = null, fileName = '' } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId || !modelType) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.modelType = String(modelType).slice(0, 40);
+    room.studio3d.glbData = glbData || null;
+    room.studio3d.fileName = String(fileName || '').slice(0, 120);
+    room.studio3d.explode = 0;
+    room.studio3d.pins = [];
+
+    socket.to(`room:${roomId}`).emit('3d-select-model', {
+      modelType: room.studio3d.modelType,
+      glbData: room.studio3d.glbData,
+      fileName: room.studio3d.fileName
+    });
+  });
+
+  socket.on('3d-camera-sync', ({ roomId, position, target } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId || !position || !target) return;
+
+    room.studio3d.camera = { position, target };
+    socket.to(`room:${roomId}`).emit('3d-camera-sync', { position, target });
+  });
+
+  socket.on('3d-explode', ({ roomId, value } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.explode = Math.max(0, Math.min(100, Number(value) || 0));
+    socket.to(`room:${roomId}`).emit('3d-explode', { value: room.studio3d.explode });
+  });
+
+  socket.on('3d-add-pin', ({ roomId, pin } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId || !pin) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.pins.push(pin);
+    if (room.studio3d.pins.length > 50) room.studio3d.pins.shift();
+    socket.to(`room:${roomId}`).emit('3d-add-pin', pin);
+  });
+
+  socket.on('3d-clear-pins', ({ roomId } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.pins = [];
+    io.to(`room:${roomId}`).emit('3d-clear-pins');
   });
 
   // --------------------------------------------------------------------------

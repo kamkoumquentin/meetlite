@@ -111,6 +111,7 @@
     toggleRecordBtn: document.getElementById('toggleRecordBtn'),
     toggleHandBtn: document.getElementById('toggleHandBtn'),
     toggleWhiteboardBtn: document.getElementById('toggleWhiteboardBtn'),
+    toggle3dBtn: document.getElementById('toggle3dBtn'),
     toggleReactionsBtn: document.getElementById('toggleReactionsBtn'),
     reactionsPicker: document.getElementById('reactionsPicker'),
     openSettingsBtn: document.getElementById('openSettingsBtn'),
@@ -157,9 +158,14 @@
           if (dom.videoGrid?.parentElement) {
             dom.videoGrid.parentElement.classList.toggle('has-whiteboard', isOpen);
           }
+          if (isOpen && window.MeetStudio3D) {
+            MeetStudio3D.close({ remote: true });
+          }
         }
       });
     }
+
+    initStudio3DModule();
 
     await Promise.all([loadIceServers(), initLocalMedia()]);
     if (localStream) {
@@ -309,7 +315,7 @@
     });
 
     // Confirmation d'entrée dans la salle : on initie une offre vers chaque pair existant
-    socket.on('room-joined', async ({ title, selfIsHost, peers, messages, whiteboardHistory, whiteboardOpen }) => {
+    socket.on('room-joined', async ({ title, selfIsHost, peers, messages, whiteboardHistory, whiteboardOpen, studio3d }) => {
       dom.roomTitle.textContent = title || 'Réunion';
       if (typeof selfIsHost === 'boolean') {
         isHost = selfIsHost;
@@ -325,6 +331,15 @@
         }
         if (whiteboardOpen) {
           MeetWhiteboard.open({ remote: true });
+        }
+      }
+
+      // Restaurer l'état du Studio 3D pour les retardataires
+      if (studio3d) {
+        if (window.MeetStudio3D) {
+          MeetStudio3D.loadState(studio3d);
+        } else {
+          window.__pendingStudio3dState = studio3d;
         }
       }
 
@@ -841,6 +856,9 @@
     dom.toggleHandBtn.addEventListener('click', toggleHandRaise);
     dom.toggleWhiteboardBtn.addEventListener('click', () => {
       if (window.MeetWhiteboard) MeetWhiteboard.toggle();
+    });
+    dom.toggle3dBtn.addEventListener('click', () => {
+      if (window.MeetStudio3D) MeetStudio3D.toggle();
     });
     dom.toggleReactionsBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1454,6 +1472,34 @@
     dom.toggleRecordBtn.classList.remove('is-recording');
     mediaRecorder = null;
     recordedChunks = [];
+  }
+
+  function initStudio3DModule() {
+    const setup = () => {
+      if (!window.MeetStudio3D) return;
+      MeetStudio3D.init({
+        socket,
+        roomId,
+        userName,
+        isHost,
+        onToggle: (isOpen) => {
+          dom.toggle3dBtn.classList.toggle('active', isOpen);
+          if (dom.videoGrid?.parentElement) {
+            dom.videoGrid.parentElement.classList.toggle('has-studio3d', isOpen);
+          }
+          if (isOpen && window.MeetWhiteboard) {
+            MeetWhiteboard.close({ remote: true });
+          }
+        }
+      });
+      if (window.__pendingStudio3dState) {
+        MeetStudio3D.loadState(window.__pendingStudio3dState);
+        delete window.__pendingStudio3dState;
+      }
+    };
+
+    if (window.MeetStudio3D) setup();
+    else window.addEventListener('meet-studio3d-ready', setup, { once: true });
   }
 
   // Lancement

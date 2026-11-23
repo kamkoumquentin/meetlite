@@ -10,6 +10,14 @@
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
   <title>Salle de réunion · MeetLite</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body class="page-room">
   <!-- Barre supérieure de la salle vidéo -->
@@ -135,6 +143,47 @@
         </div>
       </div>
 
+      <!-- Studio 3D Collaboratif (Three.js) -->
+      <div id="studio3dContainer" class="wb-container hidden" aria-label="Studio 3D collaboratif">
+        <div class="wb-header">
+          <div class="wb-toolbar">
+            <select id="model3dSelect" class="studio3d-select" aria-label="Modèle 3D">
+              <option value="arduino">Arduino Uno</option>
+              <option value="vehicle">Véhicule / Châssis</option>
+              <option value="piping">Tuyauterie industrielle</option>
+            </select>
+
+            <label class="wb-btn studio3d-import-btn" title="Importer un modèle .glb ou .gltf">
+              📁 Importer .GLB
+              <input type="file" id="import3dInput" accept=".glb,.gltf" hidden />
+            </label>
+
+            <div class="wb-sep"></div>
+
+            <label class="studio3d-slider-wrap" title="Vue éclatée de l'assemblage">
+              <span>Éclatement</span>
+              <input type="range" id="explode3dSlider" min="0" max="100" value="0" />
+            </label>
+
+            <div class="wb-sep"></div>
+
+            <button type="button" id="syncCamera3dBtn" class="wb-btn" title="Synchroniser ma caméra avec la salle">
+              🎥 Sync vue
+            </button>
+
+            <button type="button" id="clearPins3dBtn" class="wb-btn" title="Effacer les repères 3D (double-clic pour placer)">
+              📍 Effacer repères
+            </button>
+          </div>
+
+          <button type="button" id="close3dBtn" class="wb-btn wb-close-btn" title="Fermer le Studio 3D" aria-label="Fermer le Studio 3D">✕</button>
+        </div>
+
+        <div id="canvas3dMount" class="studio3d-mount">
+          <div class="studio3d-hint">Glisser : orbiter · Molette/Pincer : zoomer · Double-clic : poser un repère</div>
+        </div>
+      </div>
+
       <!-- Alerte non bloquante en cas d'erreur média (permission refusée, etc.) -->
       <div id="mediaAlert" class="media-alert hidden" role="alert"></div>
 
@@ -219,6 +268,11 @@
       <button type="button" id="toggleWhiteboardBtn" class="ctrl-btn" title="Tableau blanc collaboratif">
         <span class="ctrl-icon">✏️</span>
         <span class="ctrl-label">Tableau</span>
+      </button>
+
+      <button type="button" id="toggle3dBtn" class="ctrl-btn" title="Studio 3D collaboratif">
+        <span class="ctrl-icon">🧊</span>
+        <span class="ctrl-label">Modèle 3D</span>
       </button>
 
       <div class="reaction-wrapper">
@@ -313,6 +367,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/whiteboard.js"></script>
+  <script type="module" src="/js/studio3d.js"></script>
   <script src="/js/room.js"></script>
 </body>
 </html>

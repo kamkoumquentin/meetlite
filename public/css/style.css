@@ -610,13 +610,13 @@ input[type="url"]:focus {
 }
 
 /* Mode Picture-in-Picture à 2 participants (interlocuteur plein écran + caméra locale flottante) */
-.video-stage:not(.has-whiteboard) .video-grid[data-count="2"]:not(.has-pinned) {
+.video-stage:not(.has-whiteboard):not(.has-studio3d) .video-grid[data-count="2"]:not(.has-pinned) {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
   overflow: hidden;
 }
 
-.video-stage:not(.has-whiteboard) .video-grid[data-count="2"]:not(.has-pinned) .video-tile.is-local {
+.video-stage:not(.has-whiteboard):not(.has-studio3d) .video-grid[data-count="2"]:not(.has-pinned) .video-tile.is-local {
   position: absolute;
   right: 16px;
   bottom: 16px;
@@ -1300,14 +1300,16 @@ input[type="url"]:focus {
   overflow: hidden;
 }
 
-/* Bande vidéo compacte au-dessus du tableau blanc (Desktop) */
-.video-stage.has-whiteboard {
+/* Bande vidéo compacte au-dessus du tableau blanc / Studio 3D (Desktop) */
+.video-stage.has-whiteboard,
+.video-stage.has-studio3d {
   justify-content: flex-start;
   align-items: stretch;
   gap: 12px;
 }
 
-.video-stage.has-whiteboard .video-grid {
+.video-stage.has-whiteboard .video-grid,
+.video-stage.has-studio3d .video-grid {
   flex: 0 0 124px;
   height: 124px;
   max-width: none;
@@ -1319,11 +1321,13 @@ input[type="url"]:focus {
   scrollbar-width: none;
 }
 
-.video-stage.has-whiteboard .video-grid::-webkit-scrollbar {
+.video-stage.has-whiteboard .video-grid::-webkit-scrollbar,
+.video-stage.has-studio3d .video-grid::-webkit-scrollbar {
   display: none;
 }
 
-.video-stage.has-whiteboard .video-tile {
+.video-stage.has-whiteboard .video-tile,
+.video-stage.has-studio3d .video-tile {
   flex: 0 0 190px;
   height: 100%;
   min-height: 0;
@@ -1505,26 +1509,28 @@ input[type="url"]:focus {
     grid-auto-rows: minmax(140px, 1fr);
   }
 
-  .video-stage:not(.has-whiteboard) .video-grid {
+  .video-stage:not(.has-whiteboard):not(.has-studio3d) .video-grid {
     height: calc(100dvh - 56px - 80px - env(safe-area-inset-bottom, 0px));
     max-height: 100%;
   }
 
-  .video-stage:not(.has-whiteboard) .video-grid[data-count="2"]:not(.has-pinned) .video-tile.is-local {
+  .video-stage:not(.has-whiteboard):not(.has-studio3d) .video-grid[data-count="2"]:not(.has-pinned) .video-tile.is-local {
     width: 108px;
     height: 148px;
     right: 10px;
     bottom: 10px;
   }
 
-  /* Bande vidéo fine en haut quand le tableau blanc est ouvert (laisse ~85% de l'écran pour dessiner) */
-  .video-stage.has-whiteboard .video-grid {
+  /* Bande vidéo fine en haut quand le tableau blanc ou le Studio 3D est ouvert */
+  .video-stage.has-whiteboard .video-grid,
+  .video-stage.has-studio3d .video-grid {
     flex: 0 0 84px;
     height: 84px;
     gap: 8px;
   }
 
-  .video-stage.has-whiteboard .video-tile {
+  .video-stage.has-whiteboard .video-tile,
+  .video-stage.has-studio3d .video-tile {
     flex: 0 0 116px;
     position: relative;
   }
@@ -1568,6 +1574,77 @@ input[type="url"]:focus {
   color: #fff;
   font-size: 0.92rem;
   outline: none;
+}
+
+/* ==========================================================================
+   STUDIO 3D COLLABORATIF (THREE.JS)
+   ========================================================================== */
+
+.studio3d-mount {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: radial-gradient(circle at center, #182235, #0b0f19);
+  overflow: hidden;
+}
+
+.studio3d-mount canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.studio3d-select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-tile);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.studio3d-import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.studio3d-slider-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.studio3d-slider-wrap input[type="range"] {
+  width: 92px;
+  accent-color: var(--primary);
+}
+
+.studio3d-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  z-index: 5;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.72);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  pointer-events: none;
 }
 
 /* Toast de notification */
