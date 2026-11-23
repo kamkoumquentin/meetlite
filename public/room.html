@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
   <title>Salle de réunion · MeetLite</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -75,43 +80,46 @@
 
       <!-- Tableau blanc collaboratif superposé -->
       <div id="whiteboardContainer" class="wb-container hidden" aria-label="Tableau blanc collaboratif">
-        <div class="wb-toolbar">
-          <div class="wb-group" role="group" aria-label="Outils de dessin">
-            <button type="button" class="wb-btn wb-tool-btn active" data-tool="pen" title="Stylo">✏️</button>
-            <button type="button" class="wb-btn wb-tool-btn" data-tool="line" title="Ligne">📏</button>
-            <button type="button" class="wb-btn wb-tool-btn" data-tool="rect" title="Rectangle">⬜</button>
-            <button type="button" class="wb-btn wb-tool-btn" data-tool="circle" title="Cercle">⭕</button>
-            <button type="button" class="wb-btn wb-tool-btn" data-tool="text" title="Texte">🔤</button>
-            <button type="button" class="wb-btn wb-tool-btn" data-tool="eraser" title="Gomme">🧹</button>
+        <div class="wb-header">
+          <div class="wb-toolbar">
+            <div class="wb-group" role="group" aria-label="Outils de dessin">
+              <button type="button" class="wb-btn wb-tool-btn active" data-tool="pen" title="Stylo">✏️</button>
+              <button type="button" class="wb-btn wb-tool-btn" data-tool="line" title="Ligne">📏</button>
+              <button type="button" class="wb-btn wb-tool-btn" data-tool="rect" title="Rectangle">⬜</button>
+              <button type="button" class="wb-btn wb-tool-btn" data-tool="circle" title="Cercle">⭕</button>
+              <button type="button" class="wb-btn wb-tool-btn" data-tool="text" title="Texte">🔤</button>
+              <button type="button" class="wb-btn wb-tool-btn" data-tool="eraser" title="Gomme">🧹</button>
+            </div>
+
+            <div class="wb-sep"></div>
+
+            <div class="wb-group" role="group" aria-label="Couleurs">
+              <button type="button" class="wb-color-btn active" data-color="#ffffff" style="background:#ffffff" title="Blanc"></button>
+              <button type="button" class="wb-color-btn" data-color="#3b82f6" style="background:#3b82f6" title="Bleu"></button>
+              <button type="button" class="wb-color-btn" data-color="#10b981" style="background:#10b981" title="Vert"></button>
+              <button type="button" class="wb-color-btn" data-color="#f59e0b" style="background:#f59e0b" title="Ambre"></button>
+              <button type="button" class="wb-color-btn" data-color="#ef4444" style="background:#ef4444" title="Rouge"></button>
+              <button type="button" class="wb-color-btn" data-color="#a855f7" style="background:#a855f7" title="Violet"></button>
+            </div>
+
+            <div class="wb-sep"></div>
+
+            <div class="wb-group" role="group" aria-label="Épaisseur du trait">
+              <button type="button" class="wb-btn wb-size-btn" data-size="2" title="Fin">Fin</button>
+              <button type="button" class="wb-btn wb-size-btn active" data-size="5" title="Moyen">Moyen</button>
+              <button type="button" class="wb-btn wb-size-btn" data-size="10" title="Épais">Épais</button>
+            </div>
+
+            <div class="wb-sep"></div>
+
+            <div class="wb-group">
+              <button type="button" id="wbThemeBtn" class="wb-btn" title="Basculer fond sombre / clair">🌓</button>
+              <button type="button" id="wbClearBtn" class="wb-btn wb-btn-danger" title="Tout effacer">🗑️</button>
+              <button type="button" id="wbExportBtn" class="wb-btn" title="Exporter en PNG">💾 PNG</button>
+            </div>
           </div>
 
-          <div class="wb-sep"></div>
-
-          <div class="wb-group" role="group" aria-label="Couleurs">
-            <button type="button" class="wb-color-btn active" data-color="#ffffff" style="background:#ffffff" title="Blanc"></button>
-            <button type="button" class="wb-color-btn" data-color="#3b82f6" style="background:#3b82f6" title="Bleu"></button>
-            <button type="button" class="wb-color-btn" data-color="#10b981" style="background:#10b981" title="Vert"></button>
-            <button type="button" class="wb-color-btn" data-color="#f59e0b" style="background:#f59e0b" title="Ambre"></button>
-            <button type="button" class="wb-color-btn" data-color="#ef4444" style="background:#ef4444" title="Rouge"></button>
-            <button type="button" class="wb-color-btn" data-color="#a855f7" style="background:#a855f7" title="Violet"></button>
-          </div>
-
-          <div class="wb-sep"></div>
-
-          <div class="wb-group" role="group" aria-label="Épaisseur du trait">
-            <button type="button" class="wb-btn wb-size-btn" data-size="2" title="Fin">Fin</button>
-            <button type="button" class="wb-btn wb-size-btn active" data-size="5" title="Moyen">Moyen</button>
-            <button type="button" class="wb-btn wb-size-btn" data-size="10" title="Épais">Épais</button>
-          </div>
-
-          <div class="wb-sep"></div>
-
-          <div class="wb-group wb-actions">
-            <button type="button" id="wbThemeBtn" class="wb-btn" title="Basculer fond sombre / clair">🌓</button>
-            <button type="button" id="wbClearBtn" class="wb-btn wb-btn-danger" title="Tout effacer">🗑️</button>
-            <button type="button" id="wbExportBtn" class="wb-btn" title="Exporter en PNG">💾 PNG</button>
-            <button type="button" id="wbCloseBtn" class="wb-btn" title="Fermer le tableau">✕</button>
-          </div>
+          <button type="button" id="wbCloseBtn" class="wb-btn wb-close-btn" title="Fermer le tableau" aria-label="Fermer le tableau">✕</button>
         </div>
 
         <div id="wbCanvasWrap" class="wb-canvas-wrap wb-theme-dark">
