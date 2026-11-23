@@ -1651,6 +1651,113 @@ input[type="url"]:focus {
   pointer-events: none;
 }
 
+/* Calque d'étiquettes 3D projetées en 2D */
+.studio3d-labels-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.pin3d-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1.5px solid #f59e0b;
+  color: #f8fafc;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  will-change: transform;
+}
+
+.pin3d-badge-num {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+/* Bulle de saisie d'annotation sans window.prompt() */
+.pin3d-popover {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(320px, calc(100% - 24px));
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(19, 22, 32, 0.96);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pin3d-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Bandeau compact des annotations actives */
+.pins3d-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.pins3d-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.pin3d-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-tile);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.pin3d-chip:hover {
+  border-color: var(--primary);
+}
+
+.pin3d-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0 2px;
+}
+
+.pin3d-chip-remove:hover {
+  color: var(--danger);
+}
+
 /* Toast de notification */
 .toast {
   position: fixed;

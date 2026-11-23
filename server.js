@@ -576,6 +576,15 @@ io.on('connection', (socket) => {
     socket.to(`room:${roomId}`).emit('3d-add-pin', pin);
   });
 
+  socket.on('3d-remove-pin', ({ roomId, pinId } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data?.roomId !== roomId || !pinId) return;
+
+    room.lastActiveAt = Date.now();
+    room.studio3d.pins = room.studio3d.pins.filter((p) => p.id !== pinId);
+    io.to(`room:${roomId}`).emit('3d-remove-pin', { pinId });
+  });
+
   socket.on('3d-clear-pins', ({ roomId } = {}) => {
     const room = rooms.get(roomId);
     if (!room || socket.data?.roomId !== roomId) return;

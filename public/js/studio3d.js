@@ -34,6 +34,8 @@ let animFrameId = null;
 let currentModelGroup = null;
 let pinsGroup = null;
 const activePins = [];
+let modelMeshes = [];
+let pendingPinDraft = null;
 let lastRendererWidth = 0;
 let lastRendererHeight = 0;
 
@@ -53,6 +55,12 @@ function init({ socket, roomId, userName, isHost, onToggle }) {
 
   dom.container = document.getElementById('studio3dContainer');
   dom.mount = document.getElementById('canvas3dMount');
+  dom.labelsOverlay = document.getElementById('labels3dOverlay');
+  dom.pinPopover = document.getElementById('pin3dPopover');
+  dom.pinInput = document.getElementById('pin3dInput');
+  dom.pinConfirmBtn = document.getElementById('pin3dConfirmBtn');
+  dom.pinCancelBtn = document.getElementById('pin3dCancelBtn');
+  dom.pinsBar = document.getElementById('pins3dBar');
   dom.modelSelect = document.getElementById('model3dSelect');
   dom.importInput = document.getElementById('import3dInput');
   dom.explodeSlider = document.getElementById('explode3dSlider');
@@ -173,16 +181,48 @@ function resizeRenderer(contentRect) {
 
 function startRenderLoop() {
   if (animFrameId) cancelAnimationFrame(animFrameId);
+  const projVec = new THREE.Vector3();
+  const localVec = new THREE.Vector3();
+
   const tick = () => {
     animFrameId = requestAnimationFrame(tick);
     if (!isOpen) return;
 
     controls.update();
 
-    // Animation pulsante sur les repères 3D
+    const mountW = dom.mount?.clientWidth || 1;
+    const mountH = dom.mount?.clientHeight || 1;
     const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.18;
+
     for (const pin of activePins) {
-      if (pin.sphere) pin.sphere.scale.setScalar(pulse);
+      const targetMesh = typeof pin.data.meshIndex === 'number'
+        ? modelMeshes[pin.data.meshIndex]
+        : null;
+
+      if (targetMesh && pin.data.localPos) {
+        localVec.set(pin.data.localPos.x, pin.data.localPos.y, pin.data.localPos.z);
+        projVec.copy(localVec);
+        targetMesh.localToWorld(projVec);
+      } else {
+        projVec.set(pin.data.x || 0, pin.data.y || 0, pin.data.z || 0);
+      }
+
+      if (pin.sphere) {
+        pin.sphere.position.copy(projVec);
+        pin.sphere.scale.setScalar(pulse);
+      }
+
+      if (pin.badgeEl) {
+        projVec.project(camera);
+        if (projVec.z > 1) {
+          pin.badgeEl.style.display = 'none';
+        } else {
+          const sx = (projVec.x * 0.5 + 0.5) * mountW;
+          const sy = (-projVec.y * 0.5 + 0.5) * mountH;
+          pin.badgeEl.style.display = 'inline-flex';
+          pin.badgeEl.style.transform = `translate3d(${sx}px, ${sy - 18}px, 0) translate(-50%, -100%)`;
+        }
+      }
     }
 
     renderer.render(scene, camera);
@@ -341,22 +381,41 @@ function bindUIEvents() {
     }
   });
 
-  // Double-clic desktop pour placer un repère 3D
+  // Double-clic desktop pour placer une annotation 3D
   renderer.domElement.addEventListener('dblclick', (e) => {
     placePinFromPointer(e.clientX, e.clientY);
   });
 
-  // Double-tap mobile pour placer un repère 3D
+  // Double-tap mobile pour placer une annotation 3D
   renderer.domElement.addEventListener('touchend', (e) => {
     const now = Date.now();
     const touch = e.changedTouches?.[0];
     if (touch && now - lastTapAt < 300) {
+      e.preventDefault();
       placePinFromPointer(touch.clientX, touch.clientY);
       lastTapAt = 0;
     } else {
       lastTapAt = now;
     }
   });
+
+  // Bulle de saisie d'annotation
+  if (dom.pinConfirmBtn) {
+    dom.pinConfirmBtn.addEventListener('click', confirmPendingPin);
+  }
+  if (dom.pinCancelBtn) {
+    dom.pinCancelBtn.addEventListener('click', cancelPendingPin);
+  }
+  if (dom.pinInput) {
+    dom.pinInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmPendingPin();
+      } else if (e.key === 'Escape') {
+        cancelPendingPin();
+      }
+    });
+  }
 }
 
 function placePinFromPointer(clientX, clientY) {
@@ -369,18 +428,63 @@ function placePinFromPointer(clientX, clientY) {
   const hits = raycaster.intersectObjects(currentModelGroup.children, true);
   if (!hits.length) return;
 
-  const pt = hits[0].point;
-  const pin = {
-    x: Number(pt.x.toFixed(3)),
-    y: Number(pt.y.toFixed(3)),
-    z: Number(pt.z.toFixed(3)),
-    label: `#${activePins.length + 1}`
+  const hit = hits[0];
+  const mesh = hit.object;
+  const meshIndex = typeof mesh.userData.meshIndex === 'number' ? mesh.userData.meshIndex : null;
+  const localVec = mesh.worldToLocal(hit.point.clone());
+
+  pendingPinDraft = {
+    meshIndex,
+    localPos: {
+      x: Number(localVec.x.toFixed(4)),
+      y: Number(localVec.y.toFixed(4)),
+      z: Number(localVec.z.toFixed(4))
+    },
+    x: Number(hit.point.x.toFixed(3)),
+    y: Number(hit.point.y.toFixed(3)),
+    z: Number(hit.point.z.toFixed(3))
   };
 
+  const suggested = mesh.name
+    ? mesh.name.replace(/[_-]+/g, ' ').trim()
+    : '';
+
+  if (dom.pinPopover && dom.pinInput) {
+    dom.pinInput.value = suggested;
+    dom.pinPopover.classList.remove('hidden');
+    dom.pinInput.focus();
+    dom.pinInput.select();
+  }
+}
+
+function confirmPendingPin() {
+  if (!pendingPinDraft) return;
+  const rawLabel = dom.pinInput ? dom.pinInput.value.trim() : '';
+  const nextIndex = activePins.length + 1;
+  const label = rawLabel || `Repère ${nextIndex}`;
+
+  const pin = {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    index: nextIndex,
+    label,
+    meshIndex: pendingPinDraft.meshIndex,
+    localPos: pendingPinDraft.localPos,
+    x: pendingPinDraft.x,
+    y: pendingPinDraft.y,
+    z: pendingPinDraft.z,
+    author: userNameRef
+  };
+
+  cancelPendingPin();
   createPinMesh(pin);
   if (socketRef) {
     socketRef.emit('3d-add-pin', { roomId: roomIdRef, pin });
   }
+}
+
+function cancelPendingPin() {
+  pendingPinDraft = null;
+  if (dom.pinPopover) dom.pinPopover.classList.add('hidden');
 }
 
 function createPinMesh(pin) {
@@ -388,44 +492,57 @@ function createPinMesh(pin) {
   const sphereMat = new THREE.MeshStandardMaterial({
     color: 0xf59e0b,
     emissive: 0xf59e0b,
-    emissiveIntensity: 0.85
+    emissiveIntensity: 0.9
   });
   const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-  sphere.position.set(pin.x, pin.y, pin.z);
-
-  const sprite = createPinLabelSprite(pin.label || `#${activePins.length + 1}`);
-  sprite.position.set(pin.x, pin.y + 0.22, pin.z);
-
+  sphere.position.set(pin.x || 0, pin.y || 0, pin.z || 0);
   pinsGroup.add(sphere);
-  pinsGroup.add(sprite);
-  activePins.push({ sphere, sprite, data: pin });
+
+  const indexNum = pin.index || activePins.length + 1;
+  let badgeEl = null;
+  if (dom.labelsOverlay) {
+    badgeEl = document.createElement('div');
+    badgeEl.className = 'pin3d-badge';
+
+    const numSpan = document.createElement('span');
+    numSpan.className = 'pin3d-badge-num';
+    numSpan.textContent = `#${indexNum}`;
+
+    const sepSpan = document.createElement('span');
+    sepSpan.textContent = '•';
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = pin.label || `Repère ${indexNum}`;
+
+    badgeEl.appendChild(numSpan);
+    badgeEl.appendChild(sepSpan);
+    badgeEl.appendChild(textSpan);
+    dom.labelsOverlay.appendChild(badgeEl);
+  }
+
+  activePins.push({ sphere, badgeEl, data: { ...pin, index: indexNum } });
+  renderPinsBar();
 }
 
-function createPinLabelSprite(text) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d');
+function removeLocalPin(pinId) {
+  const idx = activePins.findIndex((p) => p.data.id === pinId);
+  if (idx === -1) return;
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-  ctx.strokeStyle = '#f59e0b';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.roundRect(14, 10, 100, 44, 14);
-  ctx.fill();
-  ctx.stroke();
+  const [entry] = activePins.splice(idx, 1);
+  if (entry.sphere) {
+    pinsGroup.remove(entry.sphere);
+    if (entry.sphere.geometry) entry.sphere.geometry.dispose();
+    if (entry.sphere.material) entry.sphere.material.dispose();
+  }
+  if (entry.badgeEl) entry.badgeEl.remove();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 26px Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 64, 33);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.45, 0.22, 1);
-  return sprite;
+  // Réindexer proprement les badges restants
+  activePins.forEach((p, i) => {
+    p.data.index = i + 1;
+    const numEl = p.badgeEl?.querySelector('.pin3d-badge-num');
+    if (numEl) numEl.textContent = `#${i + 1}`;
+  });
+  renderPinsBar();
 }
 
 function clearLocalPins() {
@@ -437,7 +554,62 @@ function clearLocalPins() {
       child.material.dispose();
     }
   }
+  for (const p of activePins) {
+    if (p.badgeEl) p.badgeEl.remove();
+  }
   activePins.length = 0;
+  renderPinsBar();
+}
+
+function renderPinsBar() {
+  if (!dom.pinsBar) return;
+  dom.pinsBar.innerHTML = '';
+  dom.pinsBar.classList.toggle('hidden', activePins.length === 0);
+
+  for (const entry of activePins) {
+    const chip = document.createElement('div');
+    chip.className = 'pin3d-chip';
+    chip.title = `Centrer la vue sur ${entry.data.label}`;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = `#${entry.data.index} ${entry.data.label}`;
+    chip.addEventListener('click', () => focusCameraOnPin(entry));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'pin3d-chip-remove';
+    removeBtn.title = 'Supprimer ce repère';
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (socketRef) {
+        socketRef.emit('3d-remove-pin', { roomId: roomIdRef, pinId: entry.data.id });
+      } else {
+        removeLocalPin(entry.data.id);
+      }
+    });
+
+    chip.appendChild(labelSpan);
+    chip.appendChild(removeBtn);
+    dom.pinsBar.appendChild(chip);
+  }
+}
+
+function focusCameraOnPin(entry) {
+  if (!camera || !controls) return;
+  const targetPos = entry.sphere ? entry.sphere.position.clone() : new THREE.Vector3(entry.data.x, entry.data.y, entry.data.z);
+  const offset = camera.position.clone().sub(controls.target).normalize().multiplyScalar(3.2);
+  controls.target.copy(targetPos);
+  camera.position.copy(targetPos).add(offset);
+  controls.update();
+
+  if (syncCameraActive && socketRef) {
+    socketRef.emit('3d-camera-sync', {
+      roomId: roomIdRef,
+      position: camera.position.toArray(),
+      target: controls.target.toArray()
+    });
+  }
 }
 
 // ============================================================================
@@ -477,6 +649,10 @@ function registerSocketEvents() {
 
   socketRef.on('3d-add-pin', (pin) => {
     if (pin) createPinMesh(pin);
+  });
+
+  socketRef.on('3d-remove-pin', ({ pinId } = {}) => {
+    if (pinId) removeLocalPin(pinId);
   });
 
   socketRef.on('3d-clear-pins', clearLocalPins);
@@ -656,11 +832,14 @@ function enhanceModelMaterials(model) {
 
 function prepareExplodableModel(group) {
   enhanceModelMaterials(group);
+  modelMeshes = [];
   const groupBox = new THREE.Box3().setFromObject(group);
   const groupCenter = groupBox.getCenter(new THREE.Vector3());
 
   group.traverse((obj) => {
     if (!obj.isMesh) return;
+    obj.userData.meshIndex = modelMeshes.length;
+    modelMeshes.push(obj);
     obj.castShadow = true;
     obj.receiveShadow = true;
     obj.userData.basePos = obj.position.clone();
