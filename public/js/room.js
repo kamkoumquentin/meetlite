@@ -69,6 +69,7 @@
   const pendingIceCandidates = new Map(); // Map<socketId, RTCIceCandidateInit[]>
   const makingOffer = new Map();          // Map<socketId, boolean>
   const ignoreOffer = new Map();          // Map<socketId, boolean>
+  const rtcStatsIntervals = new Map();    // Map<socketId, number>
 
   // Références DOM
   const dom = {
@@ -171,10 +172,43 @@
 
     mediaInitPromise = Promise.all([loadIceServers(), initLocalMedia()]);
     await mediaInitPromise;
+    logIceServersConfig();
     if (localStream) {
       dom.prejoinVideo.srcObject = localStream;
     }
     updateLocalControlsUI();
+  }
+
+  function logIceServersConfig() {
+    const urls = (rtcConfig.iceServers || []).flatMap((srv) =>
+      Array.isArray(srv.urls) ? srv.urls : [srv.urls]
+    ).filter(Boolean);
+    const hasTurn = urls.some((u) => /^turns?:/i.test(String(u)));
+    console.log('[RTC] iceServers:', urls, 'hasTurn=', hasTurn);
+  }
+
+  function logMediaStreamDiagnostics(sourceLabel, stream) {
+    if (!stream) return;
+    const tracks = stream.getTracks();
+    console.log(`[RTC] ${sourceLabel}: pistes=${tracks.length}`);
+    tracks.forEach((track) => {
+      const s = typeof track.getSettings === 'function' ? track.getSettings() : {};
+      console.log(
+        `[RTC] ${sourceLabel} track:`,
+        track.kind,
+        `label="${track.label}"`,
+        `readyState=${track.readyState}`,
+        `settings=${JSON.stringify({
+          width: s.width,
+          height: s.height,
+          frameRate: s.frameRate,
+          facingMode: s.facingMode
+        })}`
+      );
+      track.onended = () => console.log(`[RTC] ${sourceLabel} ${track.kind} onended at ${new Date().toISOString()}`);
+      track.onmute = () => console.log(`[RTC] ${sourceLabel} ${track.kind} onmute at ${new Date().toISOString()}`);
+      track.onunmute = () => console.log(`[RTC] ${sourceLabel} ${track.kind} onunmute at ${new Date().toISOString()}`);
+    });
   }
 
   async function loadIceServers() {
@@ -210,7 +244,9 @@
 
     if (localStream) {
       dom.localVideo.srcObject = localStream;
-      dom.localVideo.play().catch(() => {});
+      dom.localVideo.play().catch((err) => {
+        console.warn('[RTC] localVideo.play error:', err?.name, err?.message);
+      });
     }
 
     startCallTimer();
@@ -261,9 +297,12 @@
 
       audioEnabled = localStream.getAudioTracks().length > 0;
       videoEnabled = localStream.getVideoTracks().length > 0;
+      logMediaStreamDiagnostics('initLocalMedia(av)', localStream);
       if (hasJoinedRoom) {
         dom.localVideo.srcObject = localStream;
-        dom.localVideo.play().catch(() => {});
+        dom.localVideo.play().catch((err) => {
+          console.warn('[RTC] localVideo.play error:', err?.name, err?.message);
+        });
       }
       if (audioEnabled) startAudioMonitor('local', localStream, dom.localTile);
     } catch (primaryErr) {
@@ -271,6 +310,7 @@
 
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        logMediaStreamDiagnostics('initLocalMedia(audio)', localStream);
         audioEnabled = localStream.getAudioTracks().length > 0;
         videoEnabled = false;
         if (audioEnabled) startAudioMonitor('local', localStream, dom.localTile);
@@ -480,10 +520,11 @@
     // Réception des pistes distantes -> stockage dans remoteStreams + affichage
     pc.ontrack = (event) => {
       console.log(
-        `[WebRTC] ${peerId} ontrack:`,
-        event.track.kind,
-        `enabled=${event.track.enabled}`,
-        `readyState=${event.track.readyState}`
+        `[RTC] ${peerId} ontrack:`,
+        `kind=${event.track.kind}`,
+        `readyState=${event.track.readyState}`,
+        `muted=${event.track.muted}`,
+        `streams=${event.streams.length}`
       );
       let stream = event.streams && event.streams[0];
       if (!stream) {
@@ -521,14 +562,19 @@
     // Surveillance de l'état ICE / connexion + badge sur la tuile
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
-      console.log(`[WebRTC] ${peerId} ICE state: ${state}`);
+      console.log(`[RTC] ${peerId} iceConnectionState=${state}`);
       updateRemoteIceBadge(peerId, state);
       if (state === 'failed') {
         MeetCommon.showToast('Connexion vidéo bloquée entre réseaux (TURN requis sur 4G/pare-feu).');
       }
     };
 
+    pc.onsignalingstatechange = () => {
+      console.log(`[RTC] ${peerId} signalingState=${pc.signalingState}`);
+    };
+
     pc.onconnectionstatechange = () => {
+      console.log(`[RTC] ${peerId} connectionState=${pc.connectionState}`);
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         removePeer(peerId);
         refreshParticipantsUI();
@@ -536,7 +582,64 @@
       }
     };
 
+    startPeerStatsLogger(peerId, pc);
     return pc;
+  }
+
+  function startPeerStatsLogger(peerId, pc) {
+    if (rtcStatsIntervals.has(peerId)) return;
+    const timerId = setInterval(async () => {
+      if (!peerConnections.has(peerId)) {
+        clearInterval(timerId);
+        rtcStatsIntervals.delete(peerId);
+        return;
+      }
+      try {
+        const stats = await pc.getStats();
+        let outVid = {};
+        let inVid = {};
+        let audioOutBytes = 0;
+        let audioInBytes = 0;
+        let selectedPair = null;
+        const candidates = new Map();
+
+        stats.forEach((report) => {
+          if (report.type === 'local-candidate' || report.type === 'remote-candidate') {
+            candidates.set(report.id, report.candidateType);
+          } else if (report.type === 'candidate-pair' && (report.nominated || report.selected)) {
+            selectedPair = report;
+          } else if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            outVid = {
+              framesEncoded: report.framesEncoded,
+              fps: report.framesPerSecond,
+              bytesSent: report.bytesSent,
+              qlr: report.qualityLimitationReason
+            };
+          } else if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            inVid = {
+              framesReceived: report.framesReceived,
+              framesDecoded: report.framesDecoded,
+              framesDropped: report.framesDropped,
+              bytesReceived: report.bytesReceived,
+              jitter: report.jitter
+            };
+          } else if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+            audioOutBytes += report.bytesSent || 0;
+          } else if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+            audioInBytes += report.bytesReceived || 0;
+          }
+        });
+
+        const localType = selectedPair ? candidates.get(selectedPair.localCandidateId) : null;
+        const remoteType = selectedPair ? candidates.get(selectedPair.remoteCandidateId) : null;
+        const rtt = selectedPair ? selectedPair.currentRoundTripTime : null;
+
+        console.log(
+          `[RTC] ${peerId} stats | outVid=${JSON.stringify(outVid)} | inVid=${JSON.stringify(inVid)} | audio=(sent:${audioOutBytes},recv:${audioInBytes}) | pair=(${localType}->${remoteType},rtt:${rtt})`
+        );
+      } catch (_err) {}
+    }, 3000);
+    rtcStatsIntervals.set(peerId, timerId);
   }
 
   function attachLocalTracksToPeer(pc) {
@@ -646,6 +749,12 @@
    * Ferme proprement la connexion d'un pair et retire sa tuile vidéo.
    */
   function removePeer(peerId) {
+    const statsTimer = rtcStatsIntervals.get(peerId);
+    if (statsTimer) {
+      clearInterval(statsTimer);
+      rtcStatsIntervals.delete(peerId);
+    }
+
     const pc = peerConnections.get(peerId);
     if (pc) {
       pc.ontrack = null;
@@ -763,7 +872,9 @@
     if (videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
-    videoEl.play().catch(() => {});
+    videoEl.play().catch((err) => {
+      console.warn(`[RTC] remoteVideo.play(${peerId}) error:`, err?.name, err?.message);
+    });
     if (stream.getAudioTracks().length > 0) {
       startAudioMonitor(peerId, stream, tile);
     }
@@ -1132,6 +1243,17 @@
     });
 
     window.addEventListener('beforeunload', cleanupAllConnections);
+
+    document.addEventListener('visibilitychange', () => {
+      const vidTracks = localStream ? localStream.getVideoTracks() : [];
+      const summary = vidTracks.map((t) => ({
+        label: t.label,
+        readyState: t.readyState,
+        muted: t.muted,
+        enabled: t.enabled
+      }));
+      console.log(`[RTC] visibilitychange=${document.visibilityState} localVideoTracks=${JSON.stringify(summary)}`);
+    });
   }
 
   function toggleMicrophone() {
@@ -1512,6 +1634,7 @@
       const newStream = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true }
       });
+      logMediaStreamDiagnostics('switchAudioDevice', newStream);
       const newTrack = newStream.getAudioTracks()[0];
       newTrack.enabled = audioEnabled;
 
@@ -1541,6 +1664,7 @@
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
       });
+      logMediaStreamDiagnostics('switchVideoDevice', newStream);
       const newTrack = newStream.getVideoTracks()[0];
       newTrack.enabled = videoEnabled;
 
