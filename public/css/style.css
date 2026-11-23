@@ -1685,12 +1685,15 @@ input[type="url"]:focus {
 }
 
 /* Bulle de saisie d'annotation sans window.prompt() */
+#pin3dPopover,
 .pin3d-popover {
-  position: absolute;
+  position: fixed;
   left: 50%;
-  top: 16px;
+  top: 72px;
   transform: translateX(-50%);
-  z-index: 20;
+  z-index: 120;
+  pointer-events: auto !important;
+  touch-action: auto !important;
   width: min(320px, calc(100% - 24px));
   padding: 12px;
   border-radius: var(--radius-sm);
@@ -1700,6 +1703,14 @@ input[type="url"]:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+#pin3dPopover input,
+#pin3dPopover button {
+  pointer-events: auto !important;
+  touch-action: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .pin3d-popover-actions {

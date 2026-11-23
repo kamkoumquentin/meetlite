@@ -399,7 +399,12 @@ function bindUIEvents() {
     }
   });
 
-  // Bulle de saisie d'annotation
+  // Bulle de saisie d'annotation (isolation totale vis-à-vis d'OrbitControls / window)
+  if (dom.pinPopover) {
+    ['pointerdown', 'mousedown', 'touchstart', 'click', 'keydown'].forEach((evtName) => {
+      dom.pinPopover.addEventListener(evtName, (e) => e.stopPropagation());
+    });
+  }
   if (dom.pinConfirmBtn) {
     dom.pinConfirmBtn.addEventListener('click', confirmPendingPin);
   }
@@ -408,6 +413,7 @@ function bindUIEvents() {
   }
   if (dom.pinInput) {
     dom.pinInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
         confirmPendingPin();
@@ -452,8 +458,10 @@ function placePinFromPointer(clientX, clientY) {
   if (dom.pinPopover && dom.pinInput) {
     dom.pinInput.value = suggested;
     dom.pinPopover.classList.remove('hidden');
-    dom.pinInput.focus();
-    dom.pinInput.select();
+    setTimeout(() => {
+      dom.pinInput.focus();
+      dom.pinInput.select();
+    }, 30);
   }
 }
 

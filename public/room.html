@@ -181,19 +181,6 @@
 
         <div id="canvas3dMount" class="studio3d-mount">
           <div id="labels3dOverlay" class="studio3d-labels-overlay" aria-hidden="true"></div>
-          <div id="pin3dPopover" class="pin3d-popover hidden" role="dialog" aria-label="Ajouter une annotation 3D">
-            <input
-              type="text"
-              id="pin3dInput"
-              placeholder="Ex: Culasse, Broche GND, Vanne..."
-              maxlength="60"
-              autocomplete="off"
-            />
-            <div class="pin3d-popover-actions">
-              <button type="button" id="pin3dConfirmBtn" class="btn btn-primary btn-sm">Valider</button>
-              <button type="button" id="pin3dCancelBtn" class="btn btn-ghost btn-sm">Annuler</button>
-            </div>
-          </div>
           <div class="studio3d-hint">Glisser : orbiter · Molette/Pincer : zoomer · Double-clic : annoter</div>
         </div>
 
@@ -377,6 +364,21 @@
           <select id="camSelect" class="device-select"></select>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Bulle de saisie d'annotation 3D (hors #canvas3dMount et hors #labels3dOverlay) -->
+  <div id="pin3dPopover" class="pin3d-popover hidden" role="dialog" aria-label="Ajouter une annotation 3D">
+    <input
+      type="text"
+      id="pin3dInput"
+      placeholder="Ex: Culasse, Broche GND, Vanne..."
+      maxlength="60"
+      autocomplete="off"
+    />
+    <div class="pin3d-popover-actions">
+      <button type="button" id="pin3dConfirmBtn" class="btn btn-primary btn-sm">Valider</button>
+      <button type="button" id="pin3dCancelBtn" class="btn btn-ghost btn-sm">Annuler</button>
     </div>
   </div>
 
