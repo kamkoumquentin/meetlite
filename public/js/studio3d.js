@@ -153,8 +153,13 @@ function resizeRenderer() {
 
 function startRenderLoop() {
   if (animFrameId) cancelAnimationFrame(animFrameId);
+  let frameCounter = 0;
   const tick = () => {
     animFrameId = requestAnimationFrame(tick);
+    frameCounter += 1;
+    if (frameCounter % 120 === 0) {
+      console.log('[3D] F - rendu actif, isOpen =', isOpen, 'enfants scène =', scene.children.length);
+    }
     if (!isOpen) return;
 
     controls.update();
@@ -266,6 +271,7 @@ function bindUIEvents() {
 
   dom.importInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
+    console.log('[3D] A - fichier choisi', file?.name, file?.size);
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
       if (window.MeetCommon) MeetCommon.showToast('Fichier trop volumineux (max 8 Mo).');
@@ -484,6 +490,7 @@ function setCurrentModel(group) {
   currentModelGroup = group;
   prepareExplodableModel(currentModelGroup);
   scene.add(currentModelGroup);
+  console.log('[3D] E - ajouté à la scène, enfants =', scene.children.length);
 }
 
 function loadBuiltInModel(type, { emit = true } = {}) {
@@ -536,10 +543,12 @@ function loadGLBFromBase64(base64Data, fileName) {
 }
 
 function parseGLBBuffer(arrayBuffer, fileName) {
+  console.log('[3D] B - avant parse, buffer =', arrayBuffer.byteLength);
   gltfLoader.parse(
     arrayBuffer,
     '',
     (gltf) => {
+      console.log('[3D] C - onLoad appelé', gltf);
       const root = gltf.scene || gltf.scenes?.[0];
       if (!root) {
         const err = new Error('Scène 3D vide dans le fichier.');
@@ -547,6 +556,9 @@ function parseGLBBuffer(arrayBuffer, fileName) {
         if (window.MeetCommon) MeetCommon.showToast(`Erreur import 3D : ${err.message}`);
         return;
       }
+
+      const diagBox = new THREE.Box3().setFromObject(root);
+      console.log('[3D] D - size:', diagBox.getSize(new THREE.Vector3()), 'center:', diagBox.getCenter(new THREE.Vector3()));
 
       // Normalisation des normales et matériaux
       enhanceModelMaterials(root);
@@ -575,10 +587,12 @@ function parseGLBBuffer(arrayBuffer, fileName) {
       resizeRenderer();
 
       if (window.MeetCommon) {
+        console.log('[3D] G - message "fichier chargé" affiché');
         MeetCommon.showToast(`Modèle chargé : ${fileName}`);
       }
     },
     (err) => {
+      console.error('[3D] ERREUR parse', err);
       console.error('[Studio3D] Erreur GLTF:', err);
       const reason = err?.message || 'format .glb/.gltf invalide ou textures externes manquantes';
       if (window.MeetCommon) {
